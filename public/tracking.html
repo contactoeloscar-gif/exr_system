@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Seguimiento de Envíos | EXR</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 0; background: #0b0f14; color:#e8eef6; }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 24px; }
+    .card { background: #121a24; border: 1px solid #233246; border-radius: 14px; padding: 18px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    h1 { margin: 0 0 10px; font-size: 22px; }
+    .muted { color:#a8b6c8; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    input { flex: 1; min-width: 220px; padding: 12px 12px; border-radius: 10px; border: 1px solid #2b3c54; background:#0f1620; color:#e8eef6; outline: none; }
+    button { padding: 12px 14px; border-radius: 10px; border: 0; background:#16a34a; color:#04110a; font-weight: 700; cursor:pointer; }
+    button:disabled { opacity:.6; cursor:not-allowed; }
+    .pill { display:inline-block; padding: 6px 10px; border-radius: 999px; background:#0f1620; border:1px solid #2b3c54; color:#cfe0f7; font-size: 12px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+    .k { font-size: 12px; color:#a8b6c8; margin-bottom: 4px; }
+    .v { font-size: 15px; }
+    .sep { height: 1px; background:#233246; margin: 14px 0; }
+    .events { list-style:none; padding:0; margin:0; }
+    .events li { padding: 12px 0; border-bottom: 1px solid #1f2c3e; }
+    .events li:last-child { border-bottom: 0; }
+    .ev-title { display:flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+    .ev-title strong { font-size: 14px; }
+    .ev-title span { font-size: 12px; color:#a8b6c8; }
+    .err { margin-top: 12px; color:#ffb4b4; background:#2a1212; border:1px solid #5a1d1d; padding: 10px 12px; border-radius: 10px; }
+    .ok { margin-top: 12px; color:#baf7cd; background:#0f2418; border:1px solid #1f5a36; padding: 10px 12px; border-radius: 10px; }
+    @media (max-width: 640px){ .grid{ grid-template-columns: 1fr; } }
+    a { color:#9ae6b4; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Seguimiento de Envíos <span class="pill">EXR</span></h1>
+      <div class="muted">Ingresá tu número de guía para ver el estado del envío.</div>
+
+      <div class="row">
+        <input id="guia" placeholder="Ej: ONCE-2026-000001" autocomplete="off" />
+        <button id="btn">Buscar</button>
+      </div>
+
+      <div id="msg"></div>
+
+      <div id="result" style="display:none;">
+        <div class="sep"></div>
+
+        <div class="row" style="justify-content: space-between; align-items:center;">
+          <div>
+            <div class="k">Número de guía</div>
+            <div class="v" id="numero"></div>
+          </div>
+          <div class="pill" id="estado"></div>
+        </div>
+
+        <div class="grid">
+          <div>
+            <div class="k">Origen</div>
+            <div class="v" id="origen"></div>
+          </div>
+          <div>
+            <div class="k">Destino</div>
+            <div class="v" id="destino"></div>
+          </div>
+          <div>
+            <div class="k">Fragilidad</div>
+            <div class="v" id="fragil"></div>
+          </div>
+          <div>
+            <div class="k">Creado</div>
+            <div class="v" id="creado"></div>
+          </div>
+        </div>
+
+        <div class="sep"></div>
+        <div class="k">Movimientos</div>
+        <ul class="events" id="eventos"></ul>
+      </div>
+
+      <div class="sep"></div>
+      <div class="muted" style="font-size:12px;">
+        Si necesitás ayuda, contactanos por WhatsApp: <a href="https://wa.me/5491162224508" target="_blank" rel="noreferrer">+54 9 11 6222-4508</a>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  function fmtDate(iso) {
+    if (!iso) return "-";
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString("es-AR");
+    } catch {
+      return iso;
+    }
+  }
+
+  function setMsg(type, text) {
+    const msg = $("msg");
+    if (!text) { msg.innerHTML = ""; return; }
+    msg.innerHTML = `<div class="${type}">${text}</div>`;
+  }
+
+  async function buscar() {
+    const guia = $("guia").value.trim();
+    if (!guia) {
+      setMsg("err", "Ingresá un número de guía.");
+      return;
+    }
+
+    $("btn").disabled = true;
+    setMsg("", "");
+    $("result").style.display = "none";
+
+    try {
+      const resp = await fetch(`/tracking/${encodeURIComponent(guia)}`);
+      const data = await resp.json();
+
+      if (!resp.ok || !data.ok) {
+        setMsg("err", data?.error || "No se pudo obtener el tracking.");
+        return;
+      }
+
+      const t = data.tracking;
+
+      $("numero").textContent = t.numero_guia || guia;
+      $("estado").textContent = t.estado_logistico || "-";
+      $("origen").textContent = t.origen || "-";
+      $("destino").textContent = t.destino || "-";
+      $("fragil").textContent = t.fragil ? "Frágil" : "No";
+      $("creado").textContent = fmtDate(t.creado);
+
+      const ul = $("eventos");
+      ul.innerHTML = "";
+
+      if (!t.eventos || t.eventos.length === 0) {
+        ul.innerHTML = `<li><div class="muted">Todavía no hay movimientos registrados.</div></li>`;
+      } else {
+        for (const e of t.eventos) {
+          const li = document.createElement("li");
+          li.innerHTML = `
+            <div class="ev-title">
+              <strong>${e.evento || "-"}</strong>
+              <span>${fmtDate(e.fecha)}</span>
+            </div>
+            <div class="muted" style="margin-top:6px;">
+              ${e.sucursal ? `Sucursal: ${e.sucursal}` : ""}
+              ${e.detalle ? `${e.sucursal ? " · " : ""}${e.detalle}` : ""}
+            </div>
+          `;
+          ul.appendChild(li);
+        }
+      }
+
+      $("result").style.display = "block";
+      setMsg("ok", "Tracking encontrado.");
+    } catch (err) {
+      setMsg("err", "Error de conexión. ¿Está el servidor encendido?");
+    } finally {
+      $("btn").disabled = false;
+    }
+  }
+
+  $("btn").addEventListener("click", buscar);
+  $("guia").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") buscar();
+  });
+
+  // Si viene con ?guia=ONCE-2026-000001 lo busca solo
+  const params = new URLSearchParams(location.search);
+  const g = params.get("guia");
+  if (g) { $("guia").value = g; buscar(); }
+</script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>EXR | Dashboard Operativo</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:0;background:#0b0f14;color:#e8eef6}
+    header{padding:16px 20px;border-bottom:1px solid #1f2a37;display:flex;gap:12px;align-items:center;justify-content:space-between}
+    .brand{font-weight:800;letter-spacing:.5px}
+    .wrap{padding:18px 20px;max-width:1100px;margin:0 auto}
+    .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+    .card{background:#0f1620;border:1px solid #1f2a37;border-radius:14px;padding:14px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    .kpi-title{opacity:.8;font-size:12px}
+    .kpi-val{font-size:28px;font-weight:800;margin-top:6px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 10px;border-bottom:1px solid #1f2a37;font-size:13px}
+    th{opacity:.75;text-align:left}
+    .chips{display:flex;flex-wrap:wrap;gap:8px}
+    .chip{border:1px solid #334155;border-radius:999px;padding:6px 10px;font-size:12px;background:#0b1220}
+    .muted{opacity:.75;font-size:12px}
+    .btn{background:#22c55e;border:none;border-radius:10px;padding:9px 12px;font-weight:700;cursor:pointer}
+    .btn:active{transform:translateY(1px)}
+    @media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="brand">EXR</div>
+    <div class="muted">Dashboard Operativo</div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <span id="scope" class="muted"></span>
+    <button class="btn" id="refreshBtn">Actualizar</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="grid">
+    <div class="card"><div class="kpi-title">Guías activas</div><div class="kpi-val" id="k_act">-</div></div>
+    <div class="card"><div class="kpi-title">Entregadas hoy</div><div class="kpi-val" id="k_ent">-</div></div>
+    <div class="card"><div class="kpi-title">CE pendiente (destino)</div><div class="kpi-val" id="k_ce">-</div></div>
+    <div class="card"><div class="kpi-title">Pagado hoy</div><div class="kpi-val" id="k_pay">-</div></div>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <div><b>Estados logísticos</b><div class="muted">conteo actual</div></div>
+      <table>
+        <thead><tr><th>Estado</th><th>Cant.</th></tr></thead>
+        <tbody id="tbl_log"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div><b>Estados de pago</b><div class="muted">conteo actual</div></div>
+      <table>
+        <thead><tr><th>Estado</th><th>Cant.</th></tr></thead>
+        <tbody id="tbl_pay"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px;">
+    <div><b>Alertas</b><div class="muted">señales operativas</div></div>
+    <div class="chips" id="chips"></div>
+    <div class="muted" id="gen"></div>
+  </div>
+</div>
+
+<script src="dashboard.js"></script>
+</body>
+</html>

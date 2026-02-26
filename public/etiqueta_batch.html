@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Impresión por bultos | EXR</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 16px; }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .muted { opacity:.75; }
+    button { padding: 8px 12px; cursor:pointer; }
+    iframe { width: 420px; height: 700px; border: 1px solid #ddd; margin-top: 12px; }
+    @media print { body { display:none; } }
+  </style>
+</head>
+<body>
+  <div class="row">
+  <div><b>EXR</b> · Impresión por bultos</div>
+  <div class="muted" id="status">Preparando…</div>
+
+  <label style="display:flex;align-items:center;gap:8px;">
+    <input type="checkbox" id="safeMode" checked />
+    Modo seguro
+  </label>
+
+  <button id="btnNext" type="button" disabled>Continuar</button>
+  <button id="btnRetry" type="button" disabled>Reintentar</button>
+  <button id="btnCancel" type="button">Cancelar</button>
+</div>
+
+  <iframe id="frame" title="Etiqueta"></iframe>
+
+  <script src="/etiqueta_batch.js"></script>
+</body>
+</html>
