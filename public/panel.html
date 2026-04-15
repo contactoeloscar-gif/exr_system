@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EXR — Panel</title>
+  <link rel="stylesheet" href="/css/exr_ui.css" />
+  <style>
+    .panel-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:14px;
+      margin-top:14px;
+    }
+
+    .panel-card{
+      text-decoration:none;
+      color:var(--text);
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
+      transition:transform .12s ease,border-color .12s ease,background .12s ease;
+    }
+
+    .panel-card:hover{
+      transform:translateY(-2px);
+      border-color:rgba(124,58,237,.35);
+      background:rgba(18,28,40,.85);
+    }
+
+    .panel-icon{
+      width:42px;
+      height:42px;
+      border-radius:14px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.03);
+      font-weight:900;
+      flex:0 0 auto;
+    }
+
+    .panel-h{
+      margin:0 0 4px 0;
+      font-size:16px;
+      font-weight:900;
+    }
+
+    .panel-p{
+      margin:0;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.45;
+    }
+
+    .panel-note{
+      margin-top:14px;
+    }
+
+    @media (max-width: 880px){
+      .panel-grid{ grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="exr-pro-wrap">
+    <header class="exr-pro-topbar">
+      <div class="exr-pro-brand">
+        <div class="exr-pro-logo">
+          <img src="/assets/exr_logo.png" alt="EXR" />
+        </div>
+        <div style="min-width:0;">
+          <h1 class="exr-pro-title">Panel</h1>
+          <div class="exr-pro-subtitle">Accesos rápidos del sistema</div>
+        </div>
+      </div>
+
+      <div class="exr-pro-row">
+        <span class="exr-pro-chip" id="chipUser">—</span>
+        <button class="exr-pro-btn" id="btnRefresh">Actualizar</button>
+        <button class="exr-pro-btn bad" id="btnLogout">Salir</button>
+      </div>
+    </header>
+
+    <section class="panel-grid">
+      <a class="exr-pro-card panel-card" href="/crear_guia.html">
+        <div class="panel-icon">G</div>
+        <div>
+          <h2 class="panel-h">Crear guía</h2>
+          <p class="panel-p">Alta operativa con cotización en vivo, bultos, seguro y pago.</p>
+        </div>
+      </a>
+
+      <a class="exr-pro-card panel-card" href="/bandeja.html">
+        <div class="panel-icon">B</div>
+        <div>
+          <h2 class="panel-h">Bandeja</h2>
+          <p class="panel-p">Operación diaria, estados, pagos, impresión y exportación.</p>
+        </div>
+      </a>
+
+      <a class="exr-pro-card panel-card" href="/lotes.html">
+        <div class="panel-icon">L</div>
+        <div>
+          <h2 class="panel-h">Lotes</h2>
+          <p class="panel-p">Colecta hacia HUB_EXR, distribución final, recepción y hoja de ruta.</p>
+        </div>
+      </a>
+
+      <a class="exr-pro-card panel-card" href="/cierres.html">
+        <div class="panel-icon">C</div>
+        <div>
+          <h2 class="panel-h">Cierres</h2>
+          <p class="panel-p">Cierre SUCURSAL operativo, consolidación GLOBAL y comprobantes.</p>
+        </div>
+      </a>
+
+      <a class="exr-pro-card panel-card" href="/cierres_historial.html">
+        <div class="panel-icon">H</div>
+        <div>
+          <h2 class="panel-h">Historial de cierres</h2>
+          <p class="panel-p">Consulta histórica, filtros y reimpresión de comprobantes.</p>
+        </div>
+      </a>
+
+      <a class="exr-pro-card panel-card" href="/admin_panel.html" id="cardAdmin">
+        <div class="panel-icon">A</div>
+        <div>
+          <h2 class="panel-h">Admin</h2>
+          <p class="panel-p">Sucursales, usuarios, roles y activación/desactivación.</p>
+        </div>
+      </a>
+
+      <a class="exr-pro-card panel-card" href="/dashboard_ejecutivo.html" id="cardDash">
+        <div class="panel-icon">D</div>
+        <div>
+          <h2 class="panel-h">Dashboard Ejecutivo</h2>
+          <p class="panel-p">KPIs, tendencia, ranking y alertas para owner/admin.</p>
+        </div>
+      </a>
+    </section>
+
+    <div class="exr-pro-hint panel-note">
+      Consejo: si vas a operar multi-sucursal real, creá un usuario OPERADOR por sucursal en <b>Admin</b>. Cada sucursal cierra su día desde <b>Cierres</b>, despacha a <b>HUB_EXR</b> desde <b>Lotes</b> y luego el OWNER/ADMIN consolida el cierre GLOBAL y la distribución final.
+    </div>
+  </div>
+
+  <script src="/panel.js?v=1"></script>
+</body>
+</html>

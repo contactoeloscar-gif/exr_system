@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lotes - EXR</title>
+  <link rel="stylesheet" href="/css/exr_ui.css" />
+  <style>
+    body { background:#0f1115; color:#e8edf2; font-family:Arial, Helvetica, sans-serif; margin:0; }
+    .wrap { max-width:1400px; margin:0 auto; padding:18px; }
+    .topbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
+    .title { font-size:28px; font-weight:700; }
+    .muted { color:#a6b0bb; font-size:13px; }
+    .grid { display:grid; grid-template-columns: 420px 1fr; gap:16px; }
+    .card {
+      background:#171b21;
+      border:1px solid #28303a;
+      border-radius:14px;
+      padding:14px;
+      box-shadow:0 8px 22px rgba(0,0,0,.22);
+    }
+    .card h3 { margin:0 0 10px; font-size:18px; }
+    .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .form-grid .full { grid-column:1 / -1; }
+    label { display:block; margin-bottom:4px; font-size:12px; color:#aeb7c2; }
+    input, select, textarea, button {
+      width:100%;
+      border-radius:10px;
+      border:1px solid #33404d;
+      background:#10151b;
+      color:#e8edf2;
+      padding:10px 12px;
+      font-size:14px;
+    }
+    textarea { min-height:82px; resize:vertical; }
+    button {
+      cursor:pointer;
+      background:#1f8f5f;
+      border-color:#1f8f5f;
+      font-weight:700;
+    }
+    button.secondary {
+      background:#1b232c;
+      border-color:#33404d;
+    }
+    button.warn {
+      background:#a56a16;
+      border-color:#a56a16;
+    }
+    button.danger {
+      background:#a33636;
+      border-color:#a33636;
+    }
+    .toolbar { display:grid; grid-template-columns: 1.1fr 1fr 1fr auto; gap:10px; margin-bottom:12px; }
+    .table-wrap { overflow:auto; border:1px solid #29323c; border-radius:12px; }
+    table { width:100%; border-collapse:collapse; min-width:1020px; }
+    th, td { border-bottom:1px solid #29323c; padding:10px; text-align:left; font-size:13px; vertical-align:top; }
+    th { background:#11161d; color:#b7c1ca; position:sticky; top:0; }
+    tr:hover td { background:#121820; }
+    .badge {
+      display:inline-block;
+      padding:4px 8px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:700;
+      border:1px solid #425164;
+      background:#121820;
+    }
+    .row-actions { display:flex; gap:6px; flex-wrap:wrap; }
+    .row-actions button { width:auto; padding:7px 10px; font-size:12px; }
+    .split { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    .list-box {
+      border:1px solid #29323c;
+      border-radius:12px;
+      padding:10px;
+      background:#12171d;
+      min-height:180px;
+      overflow:auto;
+    }
+    .mini-title { font-size:13px; font-weight:700; margin-bottom:8px; }
+    .item {
+      border:1px solid #303944;
+      border-radius:10px;
+      padding:8px;
+      margin-bottom:8px;
+      background:#171d25;
+    }
+    .item:last-child { margin-bottom:0; }
+    .item .line1 { font-weight:700; font-size:13px; }
+    .item .line2 { font-size:12px; color:#aeb7c2; margin-top:4px; }
+    .item .line3 { font-size:12px; color:#8dc5a8; margin-top:4px; }
+    .detail-head {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:10px;
+      margin-bottom:12px;
+    }
+    .detail-number { font-size:22px; font-weight:700; }
+    .detail-actions {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .detail-actions button { width:auto; padding:9px 12px; }
+    .detail-meta {
+      display:grid;
+      grid-template-columns:repeat(5,1fr);
+      gap:10px;
+      margin-bottom:12px;
+    }
+    .meta-box {
+      border:1px solid #2e3843;
+      border-radius:12px;
+      background:#11161d;
+      padding:10px;
+    }
+    .meta-k { font-size:11px; color:#9facb8; text-transform:uppercase; margin-bottom:5px; }
+    .meta-v { font-size:14px; font-weight:700; }
+    .status {
+      margin-top:10px;
+      font-size:13px;
+      color:#b7c1ca;
+      min-height:18px;
+    }
+    .empty {
+      color:#9aa5b1;
+      font-size:13px;
+      padding:12px;
+      border:1px dashed #3a4654;
+      border-radius:12px;
+      background:#11161d;
+    }
+    .section-spacer { margin-top:14px; }
+    @media (max-width: 1100px) {
+      .grid { grid-template-columns:1fr; }
+      .detail-meta { grid-template-columns:repeat(2,1fr); }
+      .toolbar { grid-template-columns:1fr 1fr; }
+      .split { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <div class="title">Lotes operativos</div>
+        <div class="muted">Colecta hacia central / distribución hacia destino final</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="card">
+        <h3>Crear lote</h3>
+
+        <div class="form-grid">
+          <div>
+            <label for="tipo_lote">Tipo de lote</label>
+            <select id="tipo_lote">
+              <option value="COLECTA">COLECTA</option>
+              <option value="DISTRIBUCION">DISTRIBUCION</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="fecha_operativa">Fecha operativa</label>
+            <input id="fecha_operativa" type="date" />
+          </div>
+
+          <div>
+            <label for="sucursal_origen_id">Sucursal origen</label>
+            <select id="sucursal_origen_id"></select>
+          </div>
+
+          <div>
+            <label for="sucursal_destino_id" id="lblDestinoLote">Destino lote / nodo receptor</label>
+            <select id="sucursal_destino_id"></select>
+          </div>
+
+          <div>
+            <label for="chofer">Chofer</label>
+            <input id="chofer" type="text" placeholder="Nombre chofer" />
+          </div>
+
+          <div>
+            <label for="vehiculo">Vehículo</label>
+            <input id="vehiculo" type="text" placeholder="Unidad / camión" />
+          </div>
+
+          <div>
+            <label for="patente">Patente</label>
+            <input id="patente" type="text" placeholder="AA123BB" />
+          </div>
+
+          <div class="full">
+            <label for="observaciones">Observaciones</label>
+            <textarea id="observaciones" placeholder="Observaciones operativas"></textarea>
+          </div>
+
+          <div class="full">
+            <button id="btnCrearLote">Crear lote</button>
+          </div>
+        </div>
+
+        <div id="createStatus" class="status"></div>
+      </section>
+
+      <section class="card">
+        <h3>Listado</h3>
+
+        <div class="toolbar">
+          <input id="f_q" type="text" placeholder="Buscar por lote, chofer, vehículo, patente" />
+          <select id="f_tipo">
+            <option value="">Todos los tipos</option>
+            <option value="COLECTA">COLECTA</option>
+            <option value="DISTRIBUCION">DISTRIBUCION</option>
+          </select>
+          <select id="f_estado">
+            <option value="">Todos los estados</option>
+            <option value="ABIERTO">ABIERTO</option>
+            <option value="CONSOLIDADO">CONSOLIDADO</option>
+            <option value="DESPACHADO">DESPACHADO</option>
+            <option value="RECIBIDO">RECIBIDO</option>
+            <option value="CERRADO">CERRADO</option>
+            <option value="ANULADO">ANULADO</option>
+          </select>
+          <button id="btnRefrescar" class="secondary">Refrescar</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Lote</th>
+                <th>Tipo</th>
+                <th>Estado</th>
+                <th>Resultado recepción</th>
+                <th>Origen</th>
+                <th>Destino lote</th>
+                <th>Guías</th>
+                <th>Bultos</th>
+                <th>Chofer</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyLotes">
+              <tr><td colspan="10">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="listStatus" class="status"></div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:16px;">
+      <div class="detail-head">
+        <div>
+          <div class="detail-number" id="detailNumero">Sin lote seleccionado</div>
+          <div class="muted" id="detailSub">Seleccioná un lote desde el listado</div>
+        </div>
+
+        <div class="detail-actions">
+          <button id="btnImprimir" class="secondary" disabled>Imprimir hoja</button>
+          <button id="btnConsolidar" class="warn" disabled>Consolidar</button>
+          <button id="btnDespachar" class="secondary" disabled>Despachar</button>
+          <button id="btnRecepcionar" class="secondary" disabled>Registrar recepción</button>
+          <button id="btnCerrarLote" class="warn" type="button" disabled>Cerrar lote</button>
+          <button id="btnAnular" class="danger" disabled>Anular</button>
+        </div>
+      </div>
+
+      <div class="detail-meta">
+        <div class="meta-box"><div class="meta-k">Tipo</div><div class="meta-v" id="mTipo">-</div></div>
+        <div class="meta-box"><div class="meta-k">Estado</div><div class="meta-v" id="mEstado">-</div></div>
+        <div class="meta-box"><div class="meta-k">Resultado recepción</div><div class="meta-v" id="mResultadoRecepcion">-</div></div>
+        <div class="meta-box"><div class="meta-k">Origen</div><div class="meta-v" id="mOrigen">-</div></div>
+        <div class="meta-box"><div class="meta-k">Destino lote</div><div class="meta-v" id="mDestino">-</div></div>
+        <div class="meta-box"><div class="meta-k">Chofer</div><div class="meta-v" id="mChofer">-</div></div>
+        <div class="meta-box"><div class="meta-k">Vehículo</div><div class="meta-v" id="mVehiculo">-</div></div>
+        <div class="meta-box"><div class="meta-k">Guías</div><div class="meta-v" id="mGuias">-</div></div>
+        <div class="meta-box"><div class="meta-k">Bultos</div><div class="meta-v" id="mBultos">-</div></div>
+      </div>
+
+      <div class="split">
+        <div>
+          <div id="addGuiaWrap">
+            <div class="mini-title">Agregar guía por número</div>
+
+            <div class="form-grid">
+              <div class="full">
+                <label for="numero_guia_add">Número de guía</label>
+                <input id="numero_guia_add" type="text" placeholder="Ej: EXR-000123" />
+              </div>
+              <div>
+                <button id="btnBuscarGuia" class="secondary">Buscar guía</button>
+              </div>
+              <div>
+                <button id="btnAgregarGuia" disabled>Agregar al lote</button>
+              </div>
+            </div>
+
+            <div id="guiaEncontradaBox" class="list-box" style="margin-top:10px;">
+              <div class="empty">Buscá una guía por número para agregarla al lote.</div>
+            </div>
+          </div>
+
+          <div class="section-spacer mini-title">Recepción</div>
+          <div class="form-grid">
+            <div class="full">
+              <label for="observacion_general">Observación general</label>
+              <textarea id="observacion_general" placeholder="Observación general de recepción"></textarea>
+            </div>
+          </div>
+
+          <div class="section-spacer mini-title">Cierre</div>
+          <div class="form-grid">
+            <div class="full">
+              <label for="observacion_cierre">Observación de cierre</label>
+              <input id="observacion_cierre" type="text" placeholder="Observación de cierre (opcional)" />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="mini-title">Guías del lote</div>
+          <div id="guiasWrap" class="list-box">
+            <div class="empty">No hay detalle cargado.</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="detailStatus" class="status"></div>
+    </section>
+  </div>
+
+  <script src="/lotes.js"></script>
+</body>
+</html>

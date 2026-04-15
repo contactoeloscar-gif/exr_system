@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hoja de Ruta - Lote</title>
+  <style>
+    :root{
+      --fg:#111;
+      --muted:#666;
+      --line:#222;
+      --soft:#999;
+      --bg:#fff;
+    }
+    *{box-sizing:border-box}
+    html,body{
+      margin:0;
+      padding:0;
+      background:var(--bg);
+      color:var(--fg);
+      font-family:Arial, Helvetica, sans-serif;
+    }
+    body{
+      padding:10mm;
+    }
+    .page{
+      width:100%;
+    }
+    .copy{
+      border:1px solid var(--line);
+      padding:10px 12px;
+      margin-bottom:12mm;
+      page-break-inside:avoid;
+    }
+    .copy:last-child{
+      margin-bottom:0;
+    }
+    .head{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:12px;
+      border-bottom:1px solid var(--line);
+      padding-bottom:8px;
+      margin-bottom:8px;
+    }
+    .brand h1{
+      margin:0 0 2px;
+      font-size:20px;
+      line-height:1.1;
+    }
+    .brand .sub{
+      font-size:12px;
+      color:var(--muted);
+    }
+    .copy-tag{
+      font-size:14px;
+      font-weight:700;
+      border:1px solid var(--line);
+      padding:6px 10px;
+      min-width:130px;
+      text-align:center;
+    }
+    .meta-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px 16px;
+      margin-bottom:8px;
+    }
+    .meta-block{
+      border:1px solid #ccc;
+      padding:8px;
+      min-height:68px;
+    }
+    .meta-title{
+      font-size:11px;
+      color:var(--muted);
+      margin-bottom:4px;
+      text-transform:uppercase;
+      letter-spacing:.3px;
+    }
+    .meta-value{
+      font-size:13px;
+      line-height:1.35;
+      font-weight:600;
+    }
+    .summary{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:8px;
+      margin-bottom:8px;
+    }
+    .summary .box{
+      border:1px solid #ccc;
+      padding:8px;
+      text-align:center;
+    }
+    .summary .k{
+      font-size:11px;
+      color:var(--muted);
+      text-transform:uppercase;
+      margin-bottom:4px;
+    }
+    .summary .v{
+      font-size:16px;
+      font-weight:700;
+      line-height:1.2;
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      margin-top:6px;
+      font-size:11px;
+    }
+    th, td{
+      border:1px solid #333;
+      padding:5px 6px;
+      vertical-align:top;
+    }
+    th{
+      background:#f2f2f2;
+      text-align:left;
+      font-size:10px;
+      text-transform:uppercase;
+    }
+    .obs-box{
+      border:1px solid #ccc;
+      min-height:52px;
+      padding:8px;
+      margin-top:8px;
+      font-size:12px;
+    }
+    .signs{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:14px;
+      margin-top:16px;
+    }
+    .sign{
+      padding-top:30px;
+      border-top:1px solid #222;
+      text-align:center;
+      font-size:11px;
+    }
+    .footer-note{
+      margin-top:8px;
+      font-size:10px;
+      color:var(--muted);
+      text-align:right;
+    }
+    .toolbar{
+      display:flex;
+      gap:8px;
+      margin-bottom:10px;
+    }
+    .toolbar button{
+      padding:8px 12px;
+      border:1px solid #222;
+      background:#fff;
+      cursor:pointer;
+      font-weight:600;
+    }
+    .status{
+      font-size:12px;
+      color:var(--muted);
+      margin-bottom:10px;
+    }
+    .chip{
+      display:inline-block;
+      border:1px solid #222;
+      padding:2px 8px;
+      font-size:11px;
+      font-weight:700;
+      margin-left:6px;
+    }
+    @media print{
+      .toolbar,
+      .status{
+        display:none !important;
+      }
+      body{
+        padding:0;
+      }
+      .copy{
+        page-break-after:always;
+        margin-bottom:0;
+        border:none;
+        padding:8mm;
+      }
+      .copy:last-child{
+        page-break-after:auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="btnImprimir">Imprimir</button>
+  </div>
+  <div id="status" class="status">Cargando hoja de ruta...</div>
+  <div id="root" class="page"></div>
+
+  <script src="/hoja_ruta_lote.js"></script>
+</body>
+</html>

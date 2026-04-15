@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EXR — Historial de cierres</title>
+<link rel="stylesheet" href="/css/exr_ui.css" />
+  <style>
+    .historial-stats{
+      color:var(--muted);
+      font-size:12px;
+    }
+
+    .historial-filters{
+      display:grid;
+      grid-template-columns:repeat(6,minmax(0,1fr));
+      gap:12px;
+    }
+
+    @media (max-width: 980px){
+      .historial-filters{
+        grid-template-columns:1fr 1fr;
+      }
+
+      .historial-head{
+        justify-content:flex-start !important;
+      }
+    }
+
+    @media (max-width: 640px){
+      .historial-filters{
+        grid-template-columns:1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="exr-pro-wrap">
+    <header class="exr-pro-topbar">
+      <div class="exr-pro-brand">
+        <div class="exr-pro-logo">
+          <img src="/assets/exr_logo.png" alt="EXR" />
+        </div>
+        <div style="min-width:0;">
+          <h1 class="exr-pro-title">Historial de cierres</h1>
+          <div class="exr-pro-subtitle">Auditoría, filtros y reimpresión</div>
+        </div>
+      </div>
+
+      <div class="exr-pro-row">
+        <button class="exr-pro-btn" id="btnVolverCierres">Cierres</button>
+        <button class="exr-pro-btn" id="btnVolverPanel">Panel</button>
+      </div>
+    </header>
+
+    <section class="exr-pro-card" style="margin-top:14px;">
+      <div class="historial-filters">
+        <div class="exr-pro-field">
+          <label for="desde">Desde</label>
+          <input class="exr-pro-input" id="desde" type="date" />
+        </div>
+
+        <div class="exr-pro-field">
+          <label for="hasta">Hasta</label>
+          <input class="exr-pro-input" id="hasta" type="date" />
+        </div>
+
+        <div class="exr-pro-field">
+          <label for="scope_modo">Tipo</label>
+          <select class="exr-pro-select" id="scope_modo">
+            <option value="">Todos</option>
+            <option value="SUCURSAL">SUCURSAL</option>
+            <option value="GLOBAL">GLOBAL</option>
+          </select>
+        </div>
+
+        <div class="exr-pro-field">
+          <label for="estado">Estado</label>
+          <select class="exr-pro-select" id="estado">
+            <option value="">Todos</option>
+            <option value="CERRADO">CERRADO</option>
+            <option value="ABIERTO">ABIERTO</option>
+          </select>
+        </div>
+
+        <div class="exr-pro-field">
+          <label for="sucursal_id">Sucursal ID</label>
+          <input class="exr-pro-input" id="sucursal_id" type="number" min="1" placeholder="Solo owner/admin" />
+        </div>
+
+        <div class="exr-pro-field">
+          <label for="limit">Límite</label>
+          <input class="exr-pro-input" id="limit" type="number" min="1" max="500" value="100" />
+        </div>
+      </div>
+
+      <div class="exr-pro-row historial-head" style="margin-top:12px;justify-content:space-between;">
+        <div class="exr-pro-row">
+          <button class="exr-pro-btn" id="btnBuscar">Buscar</button>
+          <button class="exr-pro-btn" id="btnLimpiar">Limpiar</button>
+        </div>
+        <div class="historial-stats" id="stats">—</div>
+      </div>
+
+      <div id="flashBox" style="display:none;"></div>
+    </section>
+
+    <section class="exr-pro-card" style="margin-top:14px;">
+      <div class="exr-pro-table-wrap">
+        <table class="exr-pro-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Fecha</th>
+              <th>Tipo</th>
+              <th>Sucursal</th>
+              <th>Estado</th>
+              <th>Resumen</th>
+              <th>Creado por</th>
+              <th>Cerrado en</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tb"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="/cierres_historial.js?v=1"></script>
+</body>
+</html>

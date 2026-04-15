@@ -9,6 +9,16 @@ const { requireRole, isOwner } = require("../middleware/roles");
 const ROLES_VALIDOS = new Set(["OWNER", "ADMIN", "ENCARGADO", "OPERADOR"]);
 const TIPOS_VALIDOS = new Set(["SUCURSAL", "DEPOSITO"]); // tu DB hoy usa esto
 
+const IS_PROD = process.env.NODE_ENV === "production";
+function serverError(res, e) {
+  console.error("[ADMIN] ERROR:", e);
+  return res.status(500).json({
+    ok: false,
+    error: "server_error",
+    ...(IS_PROD ? {} : { detail: e.message }),
+  });
+}
+
 function norm(v) {
   return String(v ?? "").trim();
 }
@@ -43,7 +53,7 @@ router.get("/sucursales", requireRole("OWNER", "ADMIN"), async (req, res) => {
     res.json({ ok: true, sucursales: r.rows });
   } catch (e) {
     console.error("GET /admin/sucursales error:", e);
-    res.status(500).json({ ok: false, error: "server_error" });
+    return serverError(res, e);
   }
 });
 
@@ -110,7 +120,7 @@ router.post("/sucursales", requireRole("OWNER", "ADMIN"), async (req, res) => {
   } catch (e) {
     await client.query("ROLLBACK");
     console.error("POST /admin/sucursales error:", e);
-    return res.status(500).json({ ok: false, error: "server_error" });
+    return serverError(res, e);
   } finally {
     client.release();
   }
@@ -118,11 +128,6 @@ router.post("/sucursales", requireRole("OWNER", "ADMIN"), async (req, res) => {
 
 /* =========================
    USUARIOS
-   Regla:
-   - OWNER/ADMIN pueden listar y gestionar.
-   - Crear OWNER: SOLO OWNER.
-   - ADMIN NO puede crear ADMIN/OWNER por defecto (seguridad).
-   - No-OWNER requiere sucursal_id.
 ========================= */
 
 // GET /admin/usuarios
@@ -138,7 +143,7 @@ router.get("/usuarios", requireRole("OWNER", "ADMIN"), async (req, res) => {
     res.json({ ok: true, usuarios: r.rows });
   } catch (e) {
     console.error("GET /admin/usuarios error:", e);
-    res.status(500).json({ ok: false, error: "server_error" });
+    return serverError(res, e);
   }
 });
 
@@ -176,7 +181,7 @@ router.post("/usuarios", requireRole("OWNER", "ADMIN"), async (req, res) => {
 
   // OWNER global: sucursal_id debe ser NULL
   if (rol === "OWNER") {
-    // forzar global
+    // forzar global (lo hacemos al insertar)
   } else {
     if (!sucursal_id) {
       return res.status(400).json({ ok: false, error: "sucursal_id requerido para este rol" });
@@ -213,7 +218,7 @@ router.post("/usuarios", requireRole("OWNER", "ADMIN"), async (req, res) => {
     res.json({ ok: true, usuario: ins.rows[0] });
   } catch (e) {
     console.error("POST /admin/usuarios error:", e);
-    res.status(500).json({ ok: false, error: "server_error" });
+    return serverError(res, e);
   }
 });
 
@@ -246,7 +251,7 @@ router.patch("/usuarios/:id/activo", requireRole("OWNER", "ADMIN"), async (req, 
     res.json({ ok: true, usuario: r.rows[0] });
   } catch (e) {
     console.error("PATCH /admin/usuarios/:id/activo error:", e);
-    res.status(500).json({ ok: false, error: "server_error" });
+    return serverError(res, e);
   }
 });
 

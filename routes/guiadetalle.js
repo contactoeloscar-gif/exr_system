@@ -5,8 +5,16 @@ const router = express.Router();
 const pool = require("../config/db");
 const { isOwnerOrAdmin } = require("../middleware/roles");
 
+function onlyNumericId(req, res, next) {
+  const id = String(req.params.id || "");
+  if (!/^\d+$/.test(id)) {
+    return res.status(404).json({ ok: false, error: "Ruta no encontrada" });
+  }
+  next();
+}
+
 // GET /guias/:id/detalle -> guia + bultos + items + eventos
-router.get("/:id/detalle", async (req, res) => {
+router.get("/:id/detalle", onlyNumericId, async (req, res) => {
   const guiaId = Number(req.params.id);
   if (!guiaId) return res.status(400).json({ ok: false, error: "id inválido" });
 
@@ -28,15 +36,14 @@ router.get("/:id/detalle", async (req, res) => {
 
     const guia = g.rows[0];
 
-    // ✅ Scope por sucursal (OWNER/ADMIN global)
+    // Scope por sucursal (OWNER/ADMIN global)
     const owner = isOwnerOrAdmin(req);
     if (!owner) {
-      if (!req.user?.sucursal_id) {
-        return res.status(403).json({ ok: false, error: "Usuario sin sucursal asignada" });
-      }
-      if (Number(guia.sucursal_origen_id) !== Number(req.user.sucursal_id)) {
-        return res.status(403).json({ ok: false, error: "Sin permisos para ver esta guía" });
-      }
+      const sId = Number(req.user?.sucursal_id);
+      if (!sId) return res.status(403).json({ ok: false, error: "Usuario sin sucursal asignada" });
+
+      const ok = Number(guia.sucursal_origen_id) === sId || Number(guia.sucursal_destino_id) === sId;
+      if (!ok) return res.status(403).json({ ok: false, error: "Sin permisos para ver esta guía" });
     }
 
     const bultos = await pool.query(
@@ -73,7 +80,7 @@ router.get("/:id/detalle", async (req, res) => {
     });
   } catch (e) {
     console.error("GET /guias/:id/detalle error:", e);
-    return res.status(500).json({ ok: false, error: e.message });
+    return res.status(500).json({ ok: false, error: "Error interno" });
   }
 });
 

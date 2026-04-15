@@ -1,45 +1,210 @@
 (() => {
   const $ = (id) => document.getElementById(id);
 
+  console.log("BANDEJA_V2 P15.3 CARGADA", new Date().toISOString());
+
+  /* =========================
+     HELPERS UI
+  ========================= */
+  function esc(str) {
+    return String(str ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function ensureToastsRoot() {
+    let root = document.querySelector(".exr-toast-wrap");
+    if (!root) {
+      root = document.createElement("div");
+      root.className = "exr-toast-wrap";
+      document.body.appendChild(root);
+    }
+    return root;
+  }
+
+  function toast(title, message, type = "") {
+    const root = ensureToastsRoot();
+    const el = document.createElement("div");
+    el.className = "exr-toast";
+    el.innerHTML = `<div class="t">${esc(title)}</div><div class="m">${esc(message)}</div>`;
+
+    if (type === "ok") el.style.borderColor = "rgba(32,201,151,.5)";
+    if (type === "warn") el.style.borderColor = "rgba(255,204,0,.5)";
+    if (type === "bad") el.style.borderColor = "rgba(255,92,119,.5)";
+
+    root.appendChild(el);
+    setTimeout(() => el.remove(), 3200);
+  }
+
+  function money(n) {
+    return Number(n ?? 0).toLocaleString("es-AR", {
+      style: "currency",
+      currency: "ARS",
+    });
+  }
+
+  function dt(iso) {
+    try {
+      return iso ? new Date(iso).toLocaleString("es-AR") : "";
+    } catch {
+      return String(iso || "");
+    }
+  }
+
+  function normalizeUpper(v) {
+    return String(v || "").trim().toUpperCase();
+  }
+
+  function normalizeLower(v) {
+    return String(v || "").trim().toLowerCase();
+  }
+
+  function pagoVisible(data) {
+    const forma = String(
+      data?.condicion_pago || data?.forma_pago || data?.tipo_cobro || ""
+    ).trim().toUpperCase();
+
+    const estado = String(data?.estado_pago || "").trim().toLowerCase();
+
+    if (forma === "ORIGEN") {
+      if (estado === "observado") return "OBSERVADO";
+      return "PAGADO";
+    }
+
+    if (forma === "DESTINO") {
+      if (estado === "cobrado_destino" || estado === "rendido") return "PAGADO";
+      if (estado === "observado") return "OBSERVADO";
+      return "PENDIENTE";
+    }
+
+    if (estado === "cobrado_destino" || estado === "rendido") return "PAGADO";
+    if (estado === "pendiente_destino" || estado === "pendiente_origen") return "PENDIENTE";
+    if (estado === "observado") return "OBSERVADO";
+    if (estado === "no_aplica") return "PAGADO";
+
+    return data?.estado_pago || "-";
+  }
+
+  /* =========================
+     LOGOUT
+  ========================= */
+  (function bindLogoutNuclear() {
+    try {
+      const ensureTypeButton = () => {
+        const btn = $("btnLogout") || document.getElementById("logoutBtn");
+        if (btn && btn.tagName === "BUTTON") btn.setAttribute("type", "button");
+      };
+
+      ensureTypeButton();
+      document.addEventListener("DOMContentLoaded", ensureTypeButton);
+
+      document.addEventListener(
+        "click",
+        (e) => {
+          const b = e.target.closest("#btnLogout, #logoutBtn, [data-action='logout']");
+          if (!b) return;
+
+          e.preventDefault();
+          e.stopPropagation();
+
+          try {
+            localStorage.removeItem("exr_token");
+            localStorage.removeItem("exr_bandeja_etag");
+            localStorage.removeItem("exr_bandeja_ui_v2");
+          } catch {}
+
+          location.replace("/operador.html");
+        },
+        true
+      );
+    } catch (err) {
+      console.error("bindLogoutNuclear error:", err);
+    }
+  })();
+
+  /* =========================
+     CONSTANTES
+  ========================= */
   const LS_TOKEN = "exr_token";
-  const LS_UI = "exr_bandeja_ui";
+  const LS_UI = "exr_bandeja_ui_v2";
   const LS_ETAG = "exr_bandeja_etag";
 
+  const ENDPOINTS = {
+    authPing: "/test-auth",
+    bandeja: "/interno/bandeja",
+    estado: "/guias/estado",
+    registrarCobro: "/interno/cobros/registrar",
+    rendirCobro: "/interno/cobros/rendir",
+    excepcionEntrega: "/interno/cobros/excepcion-entrega",
+  };
+
   const TABS = [
-    { key: "RECIBIDO_ORIGEN", label: "Pendientes" },
-    { key: "EN_TRANSITO", label: "En tránsito" },
+    { key: "RECIBIDO_ORIGEN", label: "Pendientes origen" },
+    { key: "EN_TRANSITO_A_CENTRAL", label: "A central" },
+    { key: "RECIBIDO_CENTRAL", label: "En central" },
+    { key: "EN_TRANSITO_A_DESTINO", label: "A destino" },
     { key: "RECIBIDO_DESTINO", label: "En destino" },
     { key: "ENTREGADO", label: "Entregadas" },
     { key: "ALL", label: "Todas" },
   ];
 
   let all = [];
-  let activeTab = "ALL";
-  let refreshTimer = null;
-  let debounceTimer = null;
-
-  // Paginación (si no la usás, dejalo igual)
-  let page = 1;
-  const limit = 25;
   let apiTotal = 0;
-
-  // Quick chips opcionales (si tu HTML los tiene)
+  let activeTab = "ALL";
   let quick = "ALL";
-
-  // ETag
-  let lastEtag = localStorage.getItem(LS_ETAG) || "";
+  let page = 1;
+  let limit = 25;
+  let debounceTimer = null;
+  let refreshTimer = null;
+  let currentUser = null;
   let lastUpdatedAt = 0;
+  let lastEtag = localStorage.getItem(LS_ETAG) || "";
 
-  /* ============================
-     UI helpers (no rompe si faltan)
-  ============================ */
-  function setText(id, txt) {
-    const el = $(id);
-    if (el) el.textContent = txt;
+  /* =========================
+     API
+  ========================= */
+  function getToken() {
+    return localStorage.getItem(LS_TOKEN) || "";
   }
 
+  function logout() {
+    localStorage.removeItem(LS_TOKEN);
+    localStorage.removeItem(LS_ETAG);
+    location.href = "/operador.html";
+  }
+
+  async function api(path, opts = {}) {
+    const token = getToken();
+    const headers = Object.assign({}, opts.headers || {});
+    if (token) headers["Authorization"] = "Bearer " + token;
+    if (opts.json) headers["Content-Type"] = "application/json";
+
+    const res = await fetch(path, { ...opts, headers });
+    const ct = res.headers.get("content-type") || "";
+    const data = ct.includes("application/json")
+      ? await res.json().catch(() => ({}))
+      : await res.text().catch(() => "");
+
+    if (!res.ok) {
+      const msg =
+        (data && data.error)
+          ? data.error
+          : (typeof data === "string" && data)
+            ? data
+            : ("HTTP " + res.status);
+      throw new Error(msg);
+    }
+
+    return data;
+  }
+
+  /* =========================
+     SYNC CHIP
+  ========================= */
   function setSyncChip(mode, extra = "") {
-    // mode: loading | ok | same | err
     const el = $("syncChip");
     if (!el) return;
 
@@ -59,206 +224,348 @@
     if (mode === "err") el.classList.add("err");
   }
 
-  function toast(type, msg) {
-    console.log(`[${type}]`, msg);
-    const el = $("msg");
-    if (el) el.textContent = msg;
-  }
-
-  function money(n) {
-    return Number(n ?? 0).toLocaleString("es-AR", { style: "currency", currency: "ARS" });
-  }
-
-  /* ============================
-     AUTH + API
-  ============================ */
-  function getToken() {
-    return localStorage.getItem(LS_TOKEN) || "";
-  }
-
-  function logout() {
-    localStorage.removeItem(LS_TOKEN);
-    location.href = "/operador.html";
-  }
-
-  async function api(path, opts = {}) {
-    const token = getToken();
-    const headers = Object.assign({}, opts.headers || {});
-    if (token) headers["Authorization"] = "Bearer " + token;
-    if (opts.json) headers["Content-Type"] = "application/json";
-
-    const res = await fetch(path, { ...opts, headers });
-    const ct = res.headers.get("content-type") || "";
-    const data = ct.includes("application/json")
-      ? await res.json().catch(() => ({}))
-      : await res.text().catch(() => "");
-
-    if (!res.ok) {
-      const msg = (data && data.error) ? data.error : ("HTTP " + res.status);
-      throw new Error(msg);
+  /* =========================
+     UI STATE
+  ========================= */
+  function readUI() {
+    try {
+      const raw = localStorage.getItem(LS_UI);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      return (obj && typeof obj === "object") ? obj : null;
+    } catch {
+      return null;
     }
-    return data;
   }
 
-  /* ============================
-     ✅ Custom Selects (PRO) - Fix dropdown blanco Chrome/Windows
-     Requiere CSS en exr_ui.css (te lo pasé antes).
-  ============================ */
-  function initCustomSelects(root = document) {
-    const selects = root.querySelectorAll("select.exr-select");
-    selects.forEach(sel => {
-      if (sel.dataset.exrCustomDone === "1") return;
-      sel.dataset.exrCustomDone = "1";
-
-      // Ocultamos el nativo pero lo dejamos en DOM
-      sel.classList.add("exr-select-native");
-
-      const wrap = document.createElement("div");
-      wrap.className = "exr-cselect";
-
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "exr-cselect-btn";
-
-      const value = document.createElement("span");
-      value.className = "exr-cselect-value";
-
-      const caret = document.createElement("span");
-      caret.className = "exr-cselect-caret";
-      caret.textContent = "▾";
-
-      btn.appendChild(value);
-      btn.appendChild(caret);
-
-      const menu = document.createElement("div");
-      menu.className = "exr-cselect-menu";
-
-      function currentLabel() {
-        const opt = sel.options[sel.selectedIndex];
-        return opt ? opt.textContent : "—";
-      }
-
-      function rebuild() {
-        value.textContent = currentLabel();
-        menu.innerHTML = "";
-
-        [...sel.options].forEach((opt, idx) => {
-          const item = document.createElement("div");
-          const isSelected = idx === sel.selectedIndex;
-          item.className = "exr-cselect-item" + (isSelected ? " selected" : "");
-          item.textContent = opt.textContent;
-
-          item.addEventListener("click", () => {
-            sel.selectedIndex = idx;
-            sel.dispatchEvent(new Event("change", { bubbles: true }));
-            close();
-            rebuild();
-          });
-
-          menu.appendChild(item);
-        });
-      }
-
-      function open() { wrap.classList.add("open"); }
-      function close() { wrap.classList.remove("open"); }
-      function toggle() { wrap.classList.contains("open") ? close() : open(); }
-
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        toggle();
-      });
-
-      // Cerrar al click afuera
-      document.addEventListener("click", (e) => {
-        if (!wrap.contains(e.target) && e.target !== sel) close();
-      });
-
-      // Escape cierra
-      document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") close();
-      });
-
-      // Sync si cambia por código / restore UI
-      sel.addEventListener("change", rebuild);
-
-      // Montaje
-      sel.parentNode.insertBefore(wrap, sel.nextSibling);
-      wrap.appendChild(btn);
-      wrap.appendChild(menu);
-
-      rebuild();
-    });
+  function writeUI(patch) {
+    const prev = readUI() || {};
+    const next = { ...prev, ...patch, saved_at: new Date().toISOString() };
+    try {
+      localStorage.setItem(LS_UI, JSON.stringify(next));
+    } catch {}
   }
 
-  /* ============================
-     Persistencia UI (opcional)
-  ============================ */
   function captureUI() {
     return {
       activeTab,
+      quick,
+      q: ($("q")?.value || "").trim(),
+      f_estado_log: $("f_estado_log")?.value || "",
+      f_estado_pago: $("f_estado_pago")?.value || "",
+      f_tipo_cobro: $("f_tipo_cobro")?.value || "",
       page,
       limit,
-      q: ($("q")?.value || "").trim(),
-      estado_log: $("f_estado_log")?.value || "",
-      estado_pago: $("f_estado_pago")?.value || "",
-      tipo_cobro: $("f_tipo_cobro")?.value || "",
-      quick
     };
   }
-  function writeUI(state) {
-    localStorage.setItem(LS_UI, JSON.stringify(state || {}));
+
+  function applyUI(state) {
+    if (!state) return;
+
+    if (state.activeTab) activeTab = state.activeTab;
+    if (state.quick) quick = state.quick;
+    if (typeof state.page === "number" && state.page >= 1) page = state.page;
+    if (typeof state.limit === "number" && [25, 50, 100].includes(state.limit)) limit = state.limit;
+
+    if ($("q") && typeof state.q === "string") $("q").value = state.q;
+    if ($("f_estado_log") && typeof state.f_estado_log === "string") $("f_estado_log").value = state.f_estado_log;
+    if ($("f_estado_pago") && typeof state.f_estado_pago === "string") $("f_estado_pago").value = state.f_estado_pago;
+    if ($("f_tipo_cobro") && typeof state.f_tipo_cobro === "string") $("f_tipo_cobro").value = state.f_tipo_cobro;
+    if ($("limitSel")) $("limitSel").value = String(limit);
   }
-  function readUI() {
-    try { return JSON.parse(localStorage.getItem(LS_UI) || "{}"); }
-    catch { return {}; }
+
+  /* =========================
+     ROLES
+  ========================= */
+  function roleUpper() {
+    return String(currentUser?.rol || "").trim().toUpperCase();
   }
 
-  /* ============================
-     Filters server-side
-  ============================ */
-  function buildServerFilters() {
-    const selEstLog = $("f_estado_log")?.value || "";
-    const estado_logistico = (activeTab !== "ALL") ? activeTab : (selEstLog || "");
+  function isOwnerOrAdminUser() {
+    return ["OWNER", "ADMIN"].includes(roleUpper());
+  }
 
-    let estado_pago = $("f_estado_pago")?.value || "";
-    let tipo_cobro = $("f_tipo_cobro")?.value || "";
-    let sin_metodo = 0;
+  /* =========================
+     BADGES
+  ========================= */
+  function badgeLog(estado) {
+    const map = {
+      RECIBIDO_ORIGEN: ["Recibido origen", "warn"],
+      EN_TRANSITO: ["En tránsito", "warn"],
+      EN_TRANSITO_A_CENTRAL: ["A central", "warn"],
+      RECIBIDO_CENTRAL: ["Recibido central", "ok"],
+      RECIBIDO_CENTRAL_OBSERVADO: ["Central observado", "bad"],
+      EN_TRANSITO_A_DESTINO: ["A destino", "warn"],
+      RECIBIDO_DESTINO: ["Recibido destino", "warn"],
+      RECIBIDO_DESTINO_OBSERVADO: ["Destino observado", "bad"],
+      ENTREGADO: ["Entregado", "ok"],
+    };
+    const [label, cls] = map[estado] || [estado || "—", ""];
+    return `<span class="badge ${cls}">${esc(label)}</span>`;
+  }
 
-    if (quick === "SIN_METODO") {
-      sin_metodo = 1;
-      estado_pago = "PAGADO";
-    } else if (quick === "PAGADO") {
-      estado_pago = "PAGADO";
-    } else if (quick === "PENDIENTE") {
-      estado_pago = "PENDIENTE";
-    } else if (quick === "CE") {
-      if (!estado_pago) estado_pago = "CONTRA_ENTREGA";
-      if (!tipo_cobro) tipo_cobro = "DESTINO";
+  function badgePago(data) {
+    const visible = pagoVisible(data);
+    const estadoTecnico = normalizeLower(data?.estado_pago);
+    const metodo = data?.metodo_pago;
+    const rendido = !!data?.rendido_at;
+
+    let cls = "";
+    if (visible === "PAGADO") cls = "ok";
+    if (visible === "PENDIENTE") cls = "warn";
+    if (visible === "OBSERVADO") cls = "bad";
+
+    const extra =
+      ((estadoTecnico === "cobrado_destino" || estadoTecnico === "rendido") && metodo)
+        ? ` <span class="muted mono" style="font-size:11px">(${esc(metodo)})</span>`
+        : (rendido ? ` <span class="muted mono" style="font-size:11px">(rendido)</span>` : "");
+
+    return `<span class="badge ${cls}">${esc(visible)}</span>${extra}`;
+  }
+
+  /* =========================
+     OPERATIVA
+  ========================= */
+  function deriveOperativa(g) {
+    const estadoLog = normalizeUpper(g.estado_logistico);
+    const estadoPago = normalizeLower(g.estado_pago);
+
+    const condicionPago = normalizeUpper(g.condicion_pago);
+    const tipoCobro = normalizeUpper(g.tipo_cobro);
+
+    const esPagoDestino = condicionPago === "DESTINO" || tipoCobro === "DESTINO";
+    const esPagoOrigen = condicionPago === "ORIGEN" || tipoCobro === "ORIGEN";
+
+    const rendido = !!g.rendido_at;
+
+    const cobroConfirmado =
+      estadoPago === "cobrado_destino" ||
+      estadoPago === "pagado" ||
+      estadoPago === "pagado_origen" ||
+      (esPagoOrigen && estadoPago === "no_aplica");
+
+    const tieneExcepcion = estadoPago === "observado";
+    const bloqueadoPorPagoOrigen = esPagoOrigen && estadoPago === "pendiente_origen";
+
+    const puedeDespachar =
+      estadoLog === "RECIBIDO_ORIGEN" &&
+      !bloqueadoPorPagoOrigen;
+
+    const puedeRecibirDestino =
+      estadoLog === "EN_TRANSITO" ||
+      estadoLog === "EN_TRANSITO_A_DESTINO";
+
+    const puedeCobrar =
+      estadoLog === "RECIBIDO_DESTINO" &&
+      esPagoDestino &&
+      estadoPago === "pendiente_destino";
+
+    const puedeEntregar =
+      (estadoLog === "RECIBIDO_DESTINO" || estadoLog === "RECIBIDO_DESTINO_OBSERVADO") &&
+      (
+        !esPagoDestino ||
+        cobroConfirmado ||
+        tieneExcepcion
+      );
+
+    const puedeRendir =
+      esPagoDestino &&
+      estadoPago === "cobrado_destino" &&
+      !rendido;
+
+    const listaParaEntrega =
+      (estadoLog === "RECIBIDO_DESTINO" || estadoLog === "RECIBIDO_DESTINO_OBSERVADO") &&
+      puedeEntregar;
+
+    let estadoOperativo = "SIN_CLASIFICAR";
+
+    if (tieneExcepcion && (estadoLog === "RECIBIDO_DESTINO" || estadoLog === "RECIBIDO_DESTINO_OBSERVADO")) {
+      estadoOperativo = "EXCEPCION_AUTORIZADA";
+    } else if (estadoLog === "RECIBIDO_ORIGEN" && bloqueadoPorPagoOrigen) {
+      estadoOperativo = "PENDIENTE_PAGO_ORIGEN";
+    } else if (estadoLog === "RECIBIDO_ORIGEN") {
+      estadoOperativo = "PENDIENTE_DESPACHO";
+    } else if (estadoLog === "EN_TRANSITO" || estadoLog === "EN_TRANSITO_A_CENTRAL" || estadoLog === "EN_TRANSITO_A_DESTINO") {
+      estadoOperativo = "EN_VIAJE";
+    } else if (estadoLog === "RECIBIDO_CENTRAL") {
+      estadoOperativo = "EN_CENTRAL";
+    } else if (estadoLog === "RECIBIDO_CENTRAL_OBSERVADO") {
+      estadoOperativo = "CENTRAL_OBSERVADO";
+    } else if (estadoLog === "RECIBIDO_DESTINO" && puedeCobrar) {
+      estadoOperativo = "PENDIENTE_COBRO_DESTINO";
+    } else if (listaParaEntrega) {
+      estadoOperativo = "LISTA_PARA_ENTREGA";
+    } else if (estadoLog === "ENTREGADO") {
+      estadoOperativo = "ENTREGADA";
     }
 
-    return { estado_logistico, estado_pago, tipo_cobro, sin_metodo };
+    if (puedeRendir) {
+      estadoOperativo = "PENDIENTE_RENDICION";
+    } else if (rendido) {
+      estadoOperativo = "RENDIDO";
+    }
+
+    return {
+      estadoLog,
+      estadoPago,
+      condicionPago,
+      tipoCobro,
+      esPagoDestino,
+      esPagoOrigen,
+      cobroConfirmado,
+      tieneExcepcion,
+      bloqueadoPorPagoOrigen,
+      rendido,
+      puedeDespachar,
+      puedeRecibirDestino,
+      puedeCobrar,
+      puedeEntregar,
+      puedeRendir,
+      listaParaEntrega,
+      estadoOperativo,
+    };
   }
 
-  /* ============================
-     Render tabs
-  ============================ */
+  function canUseExcepcion(guia) {
+    if (!isOwnerOrAdminUser()) return false;
+
+    const op = deriveOperativa(guia);
+    return (
+      op.esPagoDestino &&
+      (op.estadoLog === "RECIBIDO_DESTINO" || op.estadoLog === "RECIBIDO_DESTINO_OBSERVADO") &&
+      op.estadoPago === "pendiente_destino"
+    );
+  }
+
+  function badgeOperativa(g) {
+    const op = deriveOperativa(g);
+    const out = [];
+
+    if (op.esPagoDestino && op.estadoPago === "pendiente_destino") {
+      out.push(`<span class="badge bad">NO ENTREGAR SIN COBRO</span>`);
+    }
+    if (op.listaParaEntrega) {
+      out.push(`<span class="badge ok">LISTA PARA ENTREGA</span>`);
+    }
+    if (op.tieneExcepcion) {
+      out.push(`<span class="badge warn">EXCEPCIÓN AUTORIZADA</span>`);
+    }
+    if (op.bloqueadoPorPagoOrigen) {
+      out.push(`<span class="badge bad">NO DESPACHAR SIN COBRO ORIGEN</span>`);
+    }
+    if (op.puedeRendir) {
+      out.push(`<span class="badge warn">PENDIENTE RENDICIÓN</span>`);
+    }
+    if (op.rendido) {
+      out.push(`<span class="badge ok">RENDIDO</span>`);
+    }
+
+    return out.join(" ");
+  }
+
+  function montoSugeridoCobro(g) {
+    const a = Number(g.monto_cobrar_destino ?? 0);
+    const b = Number(g.monto_total ?? 0);
+    return a > 0 ? a : b;
+  }
+
+  /* =========================
+     MODAL RUNTIME
+  ========================= */
+  function ensureRuntimeModal() {
+    if ($("modalBack")) return;
+
+    const back = document.createElement("div");
+    back.id = "modalBack";
+    back.style.cssText = [
+      "display:none",
+      "position:fixed",
+      "inset:0",
+      "background:rgba(0,0,0,.55)",
+      "z-index:9999",
+      "align-items:center",
+      "justify-content:center",
+      "padding:16px"
+    ].join(";");
+
+    back.innerHTML = `
+      <div id="modalCard" style="width:min(560px,96vw);background:#101722;border:1px solid rgba(255,255,255,.08);border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.35);overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08)">
+          <div id="modalTitle" style="font-weight:700">Operación</div>
+          <button type="button" data-modal-close="1" class="exr-pro-btn">Cerrar</button>
+        </div>
+        <div id="modalBody" style="padding:16px"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;padding:14px 16px;border-top:1px solid rgba(255,255,255,.08)">
+          <button type="button" id="modalCancel" class="exr-pro-btn">Cancelar</button>
+          <button type="button" id="modalConfirm" class="exr-pro-btn ok">Confirmar</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(back);
+
+    back.addEventListener("click", (e) => {
+      if (e.target === back || e.target.closest("[data-modal-close='1']")) {
+        closeModal();
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && back.style.display === "flex") closeModal();
+    });
+  }
+
+  function closeModal() {
+    const back = $("modalBack");
+    if (!back) return;
+    back.style.display = "none";
+
+    const body = $("modalBody");
+    if (body) body.innerHTML = "";
+  }
+
+  function openModal({ title, html, confirmText = "Confirmar", onConfirm }) {
+    ensureRuntimeModal();
+
+    const back = $("modalBack");
+    const titleEl = $("modalTitle");
+    const bodyEl = $("modalBody");
+    const btnCancel = $("modalCancel");
+    const btnConfirm = $("modalConfirm");
+
+    if (!back || !titleEl || !bodyEl || !btnCancel || !btnConfirm) return;
+
+    titleEl.textContent = title;
+    bodyEl.innerHTML = html;
+    btnConfirm.textContent = confirmText;
+    back.style.display = "flex";
+
+    btnCancel.onclick = () => closeModal();
+
+    btnConfirm.onclick = async () => {
+      try {
+        btnConfirm.disabled = true;
+        btnCancel.disabled = true;
+        await onConfirm?.({ body: bodyEl, close: closeModal });
+      } finally {
+        btnConfirm.disabled = false;
+        btnCancel.disabled = false;
+      }
+    };
+  }
+
+  /* =========================
+     TABS / FILTERS
+  ========================= */
   function renderTabs() {
     const el = $("tabs");
     if (!el) return;
 
-    el.innerHTML = TABS.map(t => {
-      const cls = (t.key === activeTab) ? "active" : "";
-      return `<button class="tab ${cls}" data-k="${t.key}">${t.label}</button>`;
-    }).join("");
-
-    el.querySelectorAll(".tab").forEach(btn => {
-      btn.addEventListener("click", () => {
-        activeTab = btn.dataset.k || "ALL";
-        page = 1;
-        writeUI(captureUI());
-        load();
-      });
-    });
+    el.innerHTML = TABS.map(t => `
+      <button class="tab ${t.key === activeTab ? "active" : ""}" data-k="${t.key}">
+        ${esc(t.label)}
+      </button>
+    `).join("");
   }
 
   function renderQuickChips() {
@@ -267,97 +574,161 @@
 
     const items = [
       { k: "ALL", label: "Todo" },
-      { k: "PENDIENTE", label: "Pendiente" },
-      { k: "CE", label: "Contra-entrega" },
-      { k: "PAGADO", label: "Pagado" },
-      { k: "SIN_METODO", label: "Pagado sin método" },
+      { k: "COBRO_DEST_PEND", label: "Cobro destino pendiente" },
+      { k: "COBRADO_DEST", label: "Cobrado destino" },
+      { k: "PEND_RENDICION", label: "Pendiente rendición" },
+      { k: "RENDIDO", label: "Rendido" },
+      { k: "OBSERVADO", label: "Observado" },
+      { k: "PEND_ORIGEN", label: "Pendiente origen" },
     ];
 
-    el.innerHTML = items.map(i => {
-      const cls = (i.k === quick) ? "active" : "";
-      return `<button class="tab ${cls}" data-qc="${i.k}">${i.label}</button>`;
-    }).join("");
-
-    el.querySelectorAll(".tab").forEach(btn => {
-      btn.addEventListener("click", () => {
-        quick = btn.dataset.qc || "ALL";
-        page = 1;
-        writeUI(captureUI());
-        load();
-      });
-    });
+    el.innerHTML = items.map(i => `
+      <button class="tab ${i.k === quick ? "active" : ""}" data-qc="${i.k}">
+        ${esc(i.label)}
+      </button>
+    `).join("");
   }
 
-  /* ============================
-     Render table
-  ============================ */
-  function badgeLog(estado) {
-    const map = {
-      RECIBIDO_ORIGEN: ["Recibido origen", "warn"],
-      EN_TRANSITO: ["En tránsito", "warn"],
-      RECIBIDO_DESTINO: ["Recibido destino", "warn"],
-      ENTREGADO: ["Entregado", "ok"],
-    };
-    const [label, cls] = map[estado] || [estado || "—", ""];
-    return `<span class="badge ${cls}">${label}</span>`;
+  function buildServerFilters() {
+    const selEstLog = $("f_estado_log")?.value || "";
+    const estado_logistico = (activeTab !== "ALL") ? activeTab : (selEstLog || "");
+
+    let estado_pago = $("f_estado_pago")?.value || "";
+    let tipo_cobro = $("f_tipo_cobro")?.value || "";
+    let sin_metodo = 0;
+    let rendicion = "";
+
+    if (quick === "COBRO_DEST_PEND") {
+      estado_pago = "pendiente_destino";
+      if (!tipo_cobro) tipo_cobro = "DESTINO";
+    } else if (quick === "COBRADO_DEST") {
+      estado_pago = "cobrado_destino";
+      if (!tipo_cobro) tipo_cobro = "DESTINO";
+    } else if (quick === "PEND_RENDICION") {
+      estado_pago = "cobrado_destino";
+      if (!tipo_cobro) tipo_cobro = "DESTINO";
+      rendicion = "pendiente";
+    } else if (quick === "RENDIDO") {
+      estado_pago = "cobrado_destino";
+      if (!tipo_cobro) tipo_cobro = "DESTINO";
+      rendicion = "rendido";
+    } else if (quick === "OBSERVADO") {
+      estado_pago = "observado";
+      if (!tipo_cobro) tipo_cobro = "DESTINO";
+    } else if (quick === "PEND_ORIGEN") {
+      estado_pago = "pendiente_origen";
+      if (!tipo_cobro) tipo_cobro = "ORIGEN";
+    } else if (quick === "SIN_METODO") {
+      sin_metodo = 1;
+      estado_pago = "cobrado_destino";
+    }
+
+    return { estado_logistico, estado_pago, tipo_cobro, sin_metodo, rendicion };
   }
 
-  function badgePago(estado, metodo) {
-    const map = {
-      PENDIENTE: ["Pendiente", "warn"],
-      CONTRA_ENTREGA: ["Contra entrega", "warn"],
-      PAGADO: ["Pagado", "ok"],
-    };
-    const [label, cls] = map[estado] || [estado || "—", ""];
-    const extra = (estado === "PAGADO" && metodo) ? ` <span class="muted mono" style="font-size:11px">(${metodo})</span>` : "";
-    const warn = (estado === "PAGADO" && !metodo) ? ` <span class="badge bad">SIN MÉTODO</span>` : "";
-    return `<span class="badge ${cls}">${label}</span>${extra}${warn}`;
+  /* =========================
+     TABLE
+  ========================= */
+  function routeLabel(g) {
+    const o = g.sucursal_origen_codigo || g.sucursal_origen_nombre || ("S" + g.sucursal_origen_id);
+    const d = g.sucursal_destino_codigo || g.sucursal_destino_nombre || ("S" + g.sucursal_destino_id);
+    const on = g.sucursal_origen_nombre ? ` <span class="muted">(${esc(g.sucursal_origen_nombre)})</span>` : "";
+    const dn = g.sucursal_destino_nombre ? ` <span class="muted">(${esc(g.sucursal_destino_nombre)})</span>` : "";
+    return `<div><b>${esc(o)}</b>${on} → <b>${esc(d)}</b>${dn}</div>`;
+  }
+
+  function rowIsBad(g) {
+    const op = deriveOperativa(g);
+    return op.esPagoDestino && op.estadoPago === "pendiente_destino";
+  }
+
+  function renderAcciones(g) {
+    const op = deriveOperativa(g);
+    const btns = [];
+
+    btns.push(`<button class="exr-pro-btn" data-act="detalle" data-id="${g.id}">Detalle</button>`);
+    btns.push(`<button class="exr-pro-btn" data-act="etiqueta_thermal" data-id="${g.id}">Etiqueta térmica</button>`);
+    btns.push(`<button class="exr-pro-btn" data-act="etiqueta_a4" data-id="${g.id}">Etiquetas A4</button>`);
+
+    if (op.puedeDespachar) {
+      btns.push(`<button class="exr-pro-btn ok" data-act="despachar" data-id="${g.id}">Despachar</button>`);
+    }
+
+    if (op.puedeRecibirDestino) {
+      btns.push(`<button class="exr-pro-btn ok" data-act="recibir_destino" data-id="${g.id}">Recibir destino</button>`);
+    }
+
+    if (op.puedeCobrar) {
+      btns.push(`<button class="exr-pro-btn ok" data-act="cobrar" data-id="${g.id}">Registrar cobro</button>`);
+    }
+
+    if (op.puedeRendir) {
+      btns.push(`<button class="exr-pro-btn ok" data-act="rendir" data-id="${g.id}">Rendir</button>`);
+    }
+
+    if (op.puedeEntregar) {
+      btns.push(`<button class="exr-pro-btn ok" data-act="entregar" data-id="${g.id}">Entregar</button>`);
+    }
+
+    if (canUseExcepcion(g)) {
+      btns.push(`<button class="exr-pro-btn" data-act="excepcion" data-id="${g.id}">Excepción</button>`);
+    }
+
+    return `<div style="display:flex;gap:8px;flex-wrap:wrap">${btns.join("")}</div>`;
+  }
+
+  function renderPager() {
+    const totalPages = Math.max(1, Math.ceil((apiTotal || 0) / limit));
+    if (page > totalPages) page = totalPages;
+
+    if ($("pagerInfo")) {
+      $("pagerInfo").textContent = `Página ${page} / ${totalPages} • Total: ${apiTotal}`;
+    }
+    if ($("btnPrev")) $("btnPrev").disabled = (page <= 1);
+    if ($("btnNext")) $("btnNext").disabled = (page >= totalPages);
+    if ($("limitSel")) $("limitSel").value = String(limit);
   }
 
   function render() {
     const tbody = $("tbody");
+    const msg = $("msg");
     if (!tbody) return;
 
-    setText("countTxt", String(all.length));
+    if ($("countTxt")) $("countTxt").textContent = String(all.length);
+    renderPager();
+
     if (!all.length) {
       tbody.innerHTML = "";
-      setText("msg", "Sin resultados.");
+      if (msg) msg.textContent = "Sin guías para los filtros actuales.";
+      writeUI(captureUI());
       return;
     }
 
-    setText("msg", "Tip: la bandeja se actualiza sola (si hay cambios).");
+    if (msg) msg.textContent = `Mostrando ${all.length} en esta página (limit ${limit}).`;
 
     tbody.innerHTML = all.map(g => {
-      const nro = g.numero_guia ?? g.id;
-
-      const ruta = `
-        <div><b>${g.sucursal_origen_codigo || g.sucursal_origen_nombre || g.sucursal_origen_id || "—"}</b>
-        → <b>${g.sucursal_destino_codigo || g.sucursal_destino_nombre || g.sucursal_destino_id || "—"}</b></div>
-        <div class="muted" style="font-size:12px">${g.created_at || ""}</div>
-      `;
-
+      const nro = esc(g.numero_guia ?? g.id);
+      const ruta = `${routeLabel(g)}<div class="muted" style="font-size:12px">${esc(dt(g.created_at))}</div>`;
       const cliente = `
-        <div><b>${g.remitente_nombre || "—"}</b> <span class="muted">→</span> <b>${g.destinatario_nombre || "—"}</b></div>
-        <div class="muted" style="font-size:12px">${g.remitente_telefono || ""} • ${g.destinatario_telefono || ""}</div>
+        <div><b>${esc(g.remitente_nombre || "—")}</b> <span class="muted">→</span> <b>${esc(g.destinatario_nombre || "—")}</b></div>
+        <div class="muted" style="font-size:12px">${esc(g.remitente_telefono || "")} • ${esc(g.destinatario_telefono || "")}</div>
       `;
-
-      const estados = `<div style="display:flex;gap:8px;flex-wrap:wrap">${badgeLog(g.estado_logistico)} ${badgePago(g.estado_pago, g.metodo_pago)}</div>`;
-
-      const monto = `
-        <div><b>${money(g.monto_total ?? 0)}</b></div>
-        <div class="muted" style="font-size:12px">${g.tipo_cobro || ""}</div>
-      `;
-
-      const acciones = `
+      const estados = `
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="exr-btn" data-act="detalle" data-id="${g.id}">Detalle</button>
-          <button class="exr-btn" data-act="etiqueta" data-id="${g.id}">Etiqueta</button>
-          <button class="exr-btn primary" data-act="pago" data-id="${g.id}">Pago</button>
+          ${badgeLog(g.estado_logistico)}
+          ${badgePago(g)}
+          ${badgeOperativa(g)}
         </div>
       `;
+      const monto = `
+        <div><b>${money(g.monto_total ?? 0)}</b></div>
+        <div class="muted" style="font-size:12px">${esc(g.condicion_pago || g.tipo_cobro || "")} • ${esc(pagoVisible(g))}</div>
+        ${(Number(g.monto_cobrar_destino || 0) > 0) ? `<div class="muted" style="font-size:12px">Cobrar destino: ${money(g.monto_cobrar_destino)}</div>` : ""}
+      `;
+      const acciones = renderAcciones(g);
 
       return `
-        <tr>
+        <tr class="${rowIsBad(g) ? "bandeja-row-bad" : ""}">
           <td class="mono"><b>${nro}</b></td>
           <td>${ruta}</td>
           <td>${cliente}</td>
@@ -367,11 +738,280 @@
         </tr>
       `;
     }).join("");
+
+    writeUI(captureUI());
   }
 
-  /* ============================
-     Delegación acciones tabla
-  ============================ */
+  /* =========================
+     CSV
+  ========================= */
+  function csvCell(v) {
+    const s = String(v ?? "");
+    const needs = /[;\n\r"]/g.test(s);
+    const escaped = s.replaceAll('"', '""');
+    return needs ? `"${escaped}"` : escaped;
+  }
+
+  function toCSV(rows) {
+    const cols = [
+      ["numero_guia", "N° Guía"],
+      ["created_at", "Fecha"],
+      ["sucursal_origen_codigo", "Origen"],
+      ["sucursal_destino_codigo", "Destino"],
+      ["sucursal_origen_nombre", "Origen (nombre)"],
+      ["sucursal_destino_nombre", "Destino (nombre)"],
+      ["remitente_nombre", "Remitente"],
+      ["remitente_telefono", "Tel Rem"],
+      ["destinatario_nombre", "Destinatario"],
+      ["destinatario_telefono", "Tel Dest"],
+      ["estado_logistico", "Estado Log"],
+      ["estado_pago", "Estado Pago"],
+      ["metodo_pago", "Método Pago"],
+      ["tipo_cobro", "Tipo Cobro"],
+      ["condicion_pago", "Condición Pago"],
+      ["monto_cobrar_destino", "Monto Cobrar Destino"],
+      ["monto_total", "Monto Total"],
+      ["rendido_at", "Rendido At"],
+      ["rendido_by_usuario", "Rendido Por"],
+    ];
+
+    const header = cols.map(c => csvCell(c[1])).join(";");
+    const lines = rows.map(r => cols.map(c => csvCell(r?.[c[0]])).join(";"));
+    return [header, ...lines].join("\n");
+  }
+
+  async function exportCSVAll() {
+    const q = ($("q")?.value || "").trim();
+    const f = buildServerFilters();
+
+    const url =
+      `${ENDPOINTS.bandeja}?export=1` +
+      `&q=${encodeURIComponent(q)}` +
+      `&estado_logistico=${encodeURIComponent(f.estado_logistico || "")}` +
+      `&estado_pago=${encodeURIComponent(f.estado_pago || "")}` +
+      `&tipo_cobro=${encodeURIComponent(f.tipo_cobro || "")}` +
+      `&sin_metodo=${encodeURIComponent(String(f.sin_metodo || 0))}` +
+      `&rendicion=${encodeURIComponent(f.rendicion || "")}`;
+
+    const data = await api(url);
+    const rows = Array.isArray(data) ? data : (data?.guias || []);
+
+    const csv = toCSV(rows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 19).replaceAll(":", "-");
+    a.href = URL.createObjectURL(blob);
+    a.download = `exr_bandeja_${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+
+    toast("Export listo", `Filas: ${rows.length}`, "ok");
+  }
+
+  /* =========================
+     OPERACIONES
+  ========================= */
+  async function cambiarEstado(guia, nuevoEstado, textoOk) {
+    await api(ENDPOINTS.estado, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({
+        guia_id: guia.id,
+        estado: nuevoEstado,
+      })
+    });
+
+    toast("OK", textoOk || "Estado actualizado.", "ok");
+    await load();
+  }
+
+  function openCobroModal(guia) {
+    const sugerido = montoSugeridoCobro(guia);
+
+    openModal({
+      title: `Registrar cobro · ${guia.numero_guia || guia.id}`,
+      confirmText: "Registrar cobro",
+      html: `
+        <div style="display:grid;gap:12px">
+          <div class="muted" style="font-size:12px">
+            Guía ${esc(guia.numero_guia || guia.id)} • ${esc(guia.remitente_nombre || "—")} → ${esc(guia.destinatario_nombre || "—")}
+          </div>
+
+          <label>
+            <div style="margin-bottom:6px">Monto</div>
+            <input id="exrCobroMonto" type="number" step="0.01" value="${sugerido}" style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0c121b;color:#fff">
+          </label>
+
+          <label>
+            <div style="margin-bottom:6px">Medio de pago</div>
+            <select id="exrCobroMedio" style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0c121b;color:#fff">
+              <option value="efectivo">Efectivo</option>
+              <option value="transferencia">Transferencia</option>
+              <option value="qr">QR</option>
+            </select>
+          </label>
+
+          <label>
+            <div style="margin-bottom:6px">Referencia externa</div>
+            <input id="exrCobroRef" type="text" placeholder="Comprobante / referencia" style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0c121b;color:#fff">
+          </label>
+
+          <label>
+            <div style="margin-bottom:6px">Observaciones</div>
+            <textarea id="exrCobroObs" rows="3" style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0c121b;color:#fff"></textarea>
+          </label>
+        </div>
+      `,
+      onConfirm: async ({ body, close }) => {
+        const monto = Number(body.querySelector("#exrCobroMonto")?.value || 0);
+        const medio_pago = String(body.querySelector("#exrCobroMedio")?.value || "").trim().toLowerCase();
+        const referencia_externa = (body.querySelector("#exrCobroRef")?.value || "").trim();
+        const observaciones = (body.querySelector("#exrCobroObs")?.value || "").trim();
+        const inpMonto = body.querySelector("#exrCobroMonto");
+
+        if (!(monto >= 0)) {
+          if (inpMonto) {
+            inpMonto.style.borderColor = "rgba(255,92,119,.8)";
+            inpMonto.focus();
+          }
+          toast("Monto inválido", "Ingresá un monto válido.", "warn");
+          return;
+        }
+
+        if (!medio_pago) {
+          toast("Falta medio de pago", "Seleccioná un medio de pago.", "warn");
+          return;
+        }
+
+        try {
+          if (inpMonto) inpMonto.style.borderColor = "";
+
+          await api(ENDPOINTS.registrarCobro, {
+            method: "POST",
+            json: true,
+            body: JSON.stringify({
+              guia_id: guia.id,
+              medio_pago,
+              monto,
+              referencia_externa,
+              observaciones,
+            })
+          });
+
+          close();
+          toast("Cobro registrado", `Guía ${guia.numero_guia || guia.id}`, "ok");
+          await load();
+        } catch (err) {
+          const msg = err?.message || "No se pudo registrar el cobro.";
+          if (inpMonto) {
+            inpMonto.style.borderColor = "rgba(255,92,119,.8)";
+            inpMonto.focus();
+          }
+          toast("Error al registrar cobro", msg, "bad");
+        }
+      }
+    });
+  }
+
+  function openRendirModal(guia) {
+    openModal({
+      title: `Rendir cobro · ${guia.numero_guia || guia.id}`,
+      confirmText: "Rendir",
+      html: `
+        <div style="display:grid;gap:12px">
+          <div class="muted" style="font-size:12px">
+            Esta acción marcará el cobro como <b>rendido</b> en el circuito interno.
+          </div>
+          <div>
+            <b>Guía:</b> ${esc(guia.numero_guia || guia.id)}
+          </div>
+          <div>
+            <b>Cliente:</b> ${esc(guia.remitente_nombre || "—")} → ${esc(guia.destinatario_nombre || "—")}
+          </div>
+          <div>
+            <b>Monto:</b> ${money(guia.monto_cobrar_destino ?? guia.monto_total ?? 0)}
+          </div>
+        </div>
+      `,
+      onConfirm: async ({ close }) => {
+        try {
+          await api(ENDPOINTS.rendirCobro, {
+            method: "POST",
+            json: true,
+            body: JSON.stringify({
+              guia_id: guia.id,
+            })
+          });
+
+          close();
+          toast("Cobro rendido", `Guía ${guia.numero_guia || guia.id}`, "ok");
+          await load();
+        } catch (err) {
+          toast("Error al rendir", err?.message || "No se pudo rendir el cobro.", "bad");
+        }
+      }
+    });
+  }
+
+  function openExcepcionModal(guia) {
+    openModal({
+      title: `Excepción de entrega · ${guia.numero_guia || guia.id}`,
+      confirmText: "Registrar excepción",
+      html: `
+        <div style="display:grid;gap:12px">
+          <div class="muted" style="font-size:12px">
+            Esta acción marcará la guía como <b>OBSERVADO</b> y permitirá la entrega bajo excepción autorizada.
+          </div>
+
+          <label>
+            <div style="margin-bottom:6px">Motivo</div>
+            <textarea id="exrExcMotivo" rows="4" placeholder="Motivo obligatorio" style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0c121b;color:#fff"></textarea>
+          </label>
+        </div>
+      `,
+      onConfirm: async ({ body, close }) => {
+        const motivo = (body.querySelector("#exrExcMotivo")?.value || "").trim();
+
+        if (!motivo) {
+          toast("Motivo obligatorio", "Completá el motivo.", "warn");
+          return;
+        }
+
+        try {
+          await api(ENDPOINTS.excepcionEntrega, {
+            method: "POST",
+            json: true,
+            body: JSON.stringify({
+              guia_id: guia.id,
+              motivo,
+            })
+          });
+
+          close();
+          toast("Excepción registrada", `Guía ${guia.numero_guia || guia.id}`, "warn");
+          await load();
+        } catch (err) {
+          toast("Error al registrar excepción", err?.message || "No se pudo registrar la excepción.", "bad");
+        }
+      }
+    });
+  }
+
+  function openConfirmModal({ title, message, confirmText, onConfirm }) {
+    openModal({
+      title,
+      confirmText,
+      html: `<div>${message}</div>`,
+      onConfirm
+    });
+  }
+
+  /* =========================
+     EVENTS
+  ========================= */
   function bindTableActions() {
     const tbody = $("tbody");
     if (!tbody) return;
@@ -387,56 +1027,234 @@
       const guia = all.find(x => String(x.id) === String(id));
       if (!guia) return;
 
-      if (act === "etiqueta") {
-        window.open(`/interno/etiqueta/${encodeURIComponent(id)}?b=1`, "_blank");
-        return;
-      }
+      if (act === "etiqueta_thermal") {
+      const total = Number(guia.cant_bultos || guia.cant_bultos_declarada || 0);
+      const qs = new URLSearchParams({
+      id: String(id),
+      mode: "thermal"
+  });
+      if (total > 0) qs.set("n", String(total));
+
+      window.open(`/etiqueta_batch.html?${qs.toString()}`, "_blank");
+     return;
+}
+
+      if (act === "etiqueta_a4") {
+      const total = Number(guia.cant_bultos || guia.cant_bultos_declarada || 0);
+      const qs = new URLSearchParams({
+      id: String(id),
+      mode: "a4"
+  });
+      if (total > 0) qs.set("n", String(total));
+
+      window.open(`/etiqueta_batch.html?${qs.toString()}`, "_blank");
+      return;
+}
+
       if (act === "detalle") {
         location.href = `/detalle.html?id=${encodeURIComponent(id)}`;
         return;
       }
-      if (act === "pago") {
-        // Si tu bandeja_v2 ya tiene modal, llamá tu función real:
-        // openPagoModal(guia);
-        toast("info", "Abrir modal pago (conectá openPagoModal si lo tenés).");
+
+      if (act === "despachar") {
+        openConfirmModal({
+          title: `Despachar · ${guia.numero_guia || guia.id}`,
+          message: "La guía pasará a EN_TRANSITO.",
+          confirmText: "Despachar",
+          onConfirm: async ({ close }) => {
+            await cambiarEstado(guia, "EN_TRANSITO", "Guía despachada.");
+            close();
+          }
+        });
         return;
+      }
+
+      if (act === "recibir_destino") {
+        openConfirmModal({
+          title: `Recibir en destino · ${guia.numero_guia || guia.id}`,
+          message: "La guía pasará a RECIBIDO_DESTINO.",
+          confirmText: "Recibir",
+          onConfirm: async ({ close }) => {
+            await cambiarEstado(guia, "RECIBIDO_DESTINO", "Guía recibida en destino.");
+            close();
+          }
+        });
+        return;
+      }
+
+      if (act === "entregar") {
+        openConfirmModal({
+          title: `Entregar · ${guia.numero_guia || guia.id}`,
+          message: "La guía pasará a ENTREGADO.",
+          confirmText: "Entregar",
+          onConfirm: async ({ close }) => {
+            await cambiarEstado(guia, "ENTREGADO", "Guía entregada.");
+            close();
+          }
+        });
+        return;
+      }
+
+      if (act === "cobrar") {
+        openCobroModal(guia);
+        return;
+      }
+
+      if (act === "rendir") {
+        openRendirModal(guia);
+        return;
+      }
+
+      if (act === "excepcion") {
+        openExcepcionModal(guia);
       }
     });
   }
 
-  /* ============================
-     Load con ETag / 304
-  ============================ */
+  function bindEvents() {
+    $("tabs")?.addEventListener("click", (e) => {
+      const btn = e.target.closest(".tab");
+      if (!btn) return;
+      activeTab = btn.dataset.k || "ALL";
+      page = 1;
+      writeUI(captureUI());
+      load();
+    });
+
+    $("quickChips")?.addEventListener("click", (e) => {
+      const btn = e.target.closest(".tab");
+      if (!btn) return;
+      quick = btn.dataset.qc || "ALL";
+      page = 1;
+      writeUI(captureUI());
+      load();
+    });
+
+    $("btnRefresh")?.addEventListener("click", () => {
+      writeUI(captureUI());
+      load();
+    });
+
+    $("btnBuscar")?.addEventListener("click", () => {
+      page = 1;
+      writeUI(captureUI());
+      load();
+    });
+
+    $("btnExport")?.addEventListener("click", () => {
+      exportCSVAll().catch(e => toast("Error export", e.message, "bad"));
+    });
+
+    ["f_estado_log", "f_estado_pago", "f_tipo_cobro"].forEach(id => {
+      const el = $(id);
+      if (!el) return;
+      el.addEventListener("change", () => {
+        page = 1;
+        writeUI(captureUI());
+        load();
+      });
+    });
+
+    $("q")?.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        page = 1;
+        writeUI(captureUI());
+        load();
+      }, 350);
+    });
+
+    $("q")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        clearTimeout(debounceTimer);
+        page = 1;
+        writeUI(captureUI());
+        load();
+      }
+      if (e.key === "Escape") {
+        clearTimeout(debounceTimer);
+        e.target.value = "";
+        if ($("f_estado_log")) $("f_estado_log").value = "";
+        if ($("f_estado_pago")) $("f_estado_pago").value = "";
+        if ($("f_tipo_cobro")) $("f_tipo_cobro").value = "";
+        page = 1;
+        writeUI(captureUI());
+        load();
+      }
+    });
+
+    $("btnPrev")?.addEventListener("click", () => {
+      if (page > 1) {
+        page--;
+        writeUI(captureUI());
+        load();
+      }
+    });
+
+    $("btnNext")?.addEventListener("click", () => {
+      const totalPages = Math.max(1, Math.ceil((apiTotal || 0) / limit));
+      if (page < totalPages) {
+        page++;
+        writeUI(captureUI());
+        load();
+      }
+    });
+
+    $("limitSel")?.addEventListener("change", (e) => {
+      limit = parseInt(e.target.value, 10) || 25;
+      page = 1;
+      writeUI(captureUI());
+      load();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key.toLowerCase() === "r") {
+        writeUI(captureUI());
+        load();
+      }
+    });
+
+    bindTableActions();
+  }
+
+  /* =========================
+     LOAD
+  ========================= */
   async function load() {
-    // validar sesión
     try {
-      const me = await api("/interno/ping", { method: "GET" });
-      const who = $("who");
-      if (who) who.textContent = `${me.user?.usuario || "operador"} · sucursal ${me.user?.sucursal_id ?? "?"}`;
-    } catch (e) {
+      const me = await api(ENDPOINTS.authPing);
+      const u = me?.user || me || {};
+      currentUser = u;
+
+      if ($("userChip")) {
+        $("userChip").textContent =
+          `${u.usuario || "usuario"} • ${u.rol || "ROL"} ${u.sucursal_id ? ("• S" + u.sucursal_id) : "• Global"}`;
+      }
+    } catch (_e) {
       return logout();
     }
 
     try {
+      if ($("msg")) $("msg").textContent = "Cargando…";
       setSyncChip("loading");
 
       const q = ($("q")?.value || "").trim();
+      const offset = (page - 1) * limit;
       const f = buildServerFilters();
 
-      const offset = (page - 1) * limit;
-
       const url =
-        `/interno/bandeja?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}` +
+        `${ENDPOINTS.bandeja}?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}` +
         `&q=${encodeURIComponent(q)}` +
         `&estado_logistico=${encodeURIComponent(f.estado_logistico || "")}` +
         `&estado_pago=${encodeURIComponent(f.estado_pago || "")}` +
         `&tipo_cobro=${encodeURIComponent(f.tipo_cobro || "")}` +
-        `&sin_metodo=${encodeURIComponent(String(f.sin_metodo || 0))}`;
+        `&sin_metodo=${encodeURIComponent(String(f.sin_metodo || 0))}` +
+        `&rendicion=${encodeURIComponent(f.rendicion || "")}`;
 
       const token = getToken();
       const headers = {};
       if (token) headers["Authorization"] = "Bearer " + token;
-      if (lastEtag) headers["If-None-Match"] = lastEtag;
+      if (lastEtag) headers["If-None-Match"] = String(lastEtag).replace(/"/g, "");
 
       const r = await fetch(url, { headers });
 
@@ -459,26 +1277,28 @@
         localStorage.setItem(LS_ETAG, etag);
       }
 
-      apiTotal = Number(data?.total ?? 0);
-      all = Array.isArray(data?.guias) ? data.guias : (Array.isArray(data) ? data : []);
+      all = Array.isArray(data) ? data : (data?.guias || []);
+      apiTotal = Number(data?.total ?? all.length ?? 0);
 
       lastUpdatedAt = Date.now();
-      setSyncChip("ok", `rows ${all.length}`);
+      setSyncChip("ok", `rows ${all.length}/${apiTotal}`);
 
       renderTabs();
       renderQuickChips();
       render();
     } catch (e) {
+      if ($("msg")) $("msg").textContent = "Error: " + e.message;
       setSyncChip("err", e.message);
-      toast("error", "Error: " + e.message);
+      toast("Error", e.message, "bad");
     }
   }
 
-  /* ============================
-     Auto refresh inteligente
-  ============================ */
+  /* =========================
+     AUTO REFRESH
+  ========================= */
   function startAutoRefresh() {
     if (refreshTimer) clearInterval(refreshTimer);
+
     refreshTimer = setInterval(() => {
       const active = document.activeElement;
       if (active && active.id === "q") return;
@@ -490,78 +1310,19 @@
     }, 8000);
   }
 
-  /* ============================
-     Events
-  ============================ */
-  function bindEvents() {
-    const btnRefresh = $("btnRefresh");
-    if (btnRefresh) btnRefresh.addEventListener("click", () => {
-      writeUI(captureUI());
-      load();
-    });
-
-    const btnLogout = $("btnLogout");
-    if (btnLogout) btnLogout.addEventListener("click", logout);
-
-    const btnBuscar = $("btnBuscar");
-    if (btnBuscar) btnBuscar.addEventListener("click", () => {
-      page = 1;
-      writeUI(captureUI());
-      load();
-    });
-
-    const q = $("q");
-    if (q) {
-      q.addEventListener("input", () => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          page = 1;
-          writeUI(captureUI());
-          load();
-        }, 350);
-      });
-
-      q.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
-          q.value = "";
-          page = 1;
-          writeUI(captureUI());
-          load();
-        }
-      });
-    }
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key.toLowerCase() === "r") {
-        writeUI(captureUI());
-        load();
-      }
-    });
-  }
-
-  /* ============================
-     Boot
-  ============================ */
+  /* =========================
+     BOOT
+  ========================= */
   function boot() {
-    // Restaurar UI si existe
-    const st = readUI();
-    if (st.activeTab) activeTab = st.activeTab;
-    if (st.page) page = st.page;
-    if (typeof st.quick === "string") quick = st.quick;
-
-    if ($("q") && st.q != null) $("q").value = st.q;
-    if ($("f_estado_log") && st.estado_log != null) $("f_estado_log").value = st.estado_log;
-    if ($("f_estado_pago") && st.estado_pago != null) $("f_estado_pago").value = st.estado_pago;
-    if ($("f_tipo_cobro") && st.tipo_cobro != null) $("f_tipo_cobro").value = st.tipo_cobro;
-
-    // ✅ Inicializamos selects custom luego de restaurar valores
-    initCustomSelects(document);
-
-    bindEvents();
-    bindTableActions();
     renderTabs();
     renderQuickChips();
+    applyUI(readUI());
+    renderTabs();
+    renderQuickChips();
+    writeUI(captureUI());
 
+    bindEvents();
+    ensureRuntimeModal();
     load();
     startAutoRefresh();
   }

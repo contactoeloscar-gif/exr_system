@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EXR — Crear Guía</title>
+<link rel="stylesheet" href="/css/exr_ui.css" />  <style>
+    .cg-grid-top{
+      display:grid;
+      grid-template-columns:1.05fr .95fr;
+      gap:14px;
+      margin-top:14px;
+      align-items:start;
+    }
+
+    .cg-grid-mid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:14px;
+      margin-top:14px;
+    }
+
+    .cg-grid-bottom{
+      display:grid;
+      grid-template-columns:1fr;
+      gap:14px;
+      margin-top:14px;
+    }
+
+    .cg-formgrid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:12px;
+    }
+
+    .cg-kpi{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:10px;
+      margin-top:10px;
+    }
+
+    .cg-k{
+      padding:10px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:rgba(255,255,255,.03);
+      min-width:0;
+    }
+
+    .cg-k b{
+      display:block;
+      font-size:18px;
+      margin-top:4px;
+    }
+
+    .cg-pre{
+      margin:12px 0 0;
+      padding:12px;
+      border-radius:12px;
+      background:rgba(255,255,255,.04);
+      border:1px solid var(--line);
+      overflow:auto;
+    }
+
+    .cg-items-row{
+      display:grid;
+      grid-template-columns:90px 90px 90px 90px 90px 44px;
+      gap:10px;
+      margin-bottom:10px;
+      align-items:end;
+    }
+
+    .cg-pay-hint{
+      border:1px dashed rgba(255,255,255,.14);
+      border-radius:14px;
+      padding:10px;
+      background:rgba(255,255,255,.03);
+    }
+
+    @media (max-width: 980px){
+      .cg-grid-top,
+      .cg-grid-mid{
+        grid-template-columns:1fr;
+      }
+
+      .cg-formgrid{
+        grid-template-columns:1fr;
+      }
+
+      .cg-kpi{
+        grid-template-columns:1fr 1fr;
+      }
+
+      .cg-items-row{
+        grid-template-columns:1fr 1fr;
+      }
+
+      .cg-items-row .it_del{
+        grid-column:2;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="exr-pro-wrap">
+    <header class="exr-pro-topbar">
+      <div class="exr-pro-brand">
+        <div class="exr-pro-logo">
+          <img src="/assets/exr_logo.png" alt="EXR" />
+        </div>
+        <div style="min-width:0;">
+          <h1 class="exr-pro-title">Crear Guía</h1>
+          <div class="exr-pro-subtitle" id="who">Cargando usuario…</div>
+        </div>
+      </div>
+
+      <div class="exr-pro-row">
+        <button class="exr-pro-btn warn" id="btnReset">Limpiar Guía</button>
+        <a class="exr-pro-btn" href="/operador.html">Volver</a>
+        <button class="exr-pro-btn bad" id="btnSalir"
+          onclick="localStorage.removeItem('exr_token'); location.href='/operador.html'">
+          Salir
+        </button>
+      </div>
+    </header>
+
+    <section class="cg-grid-top">
+      <section class="exr-pro-card">
+        <h2 class="exr-pro-section-title">Ruta + Envío</h2>
+
+        <div class="cg-formgrid">
+          <label class="exr-pro-field">Sucursal ORIGEN (por token)
+            <input class="exr-pro-input" id="origen_locked" readonly value="Cargando..." />
+            <div class="exr-muted exr-small">Bloqueado para evitar crear guías desde otra sucursal.</div>
+          </label>
+
+          <label class="exr-pro-field">Sucursal DESTINO
+            <select class="exr-pro-select" id="sucursal_destino_id">
+              <option value="">Seleccionar…</option>
+            </select>
+          </label>
+
+          <label class="exr-pro-field">Entrega a domicilio
+            <select class="exr-pro-select" id="entrega_domicilio">
+              <option value="false">No</option>
+              <option value="true">Sí (+$6000)</option>
+            </select>
+          </label>
+
+          <label class="exr-pro-field" style="grid-column:1/-1;">Observaciones
+            <input class="exr-pro-input" id="observaciones" placeholder="Opcional" />
+          </label>
+        </div>
+
+        <div class="cg-kpi">
+          <div class="cg-k"><span class="exr-muted">Volumétrico (kg)</span><b id="k_vol">0.00</b></div>
+          <div class="cg-k"><span class="exr-muted">Kg cobrable (kg)</span><b id="k_kgc">0.00</b></div>
+          <div class="cg-k"><span class="exr-muted">Envío</span><b id="k_env">$ 0.00</b></div>
+          <div class="cg-k"><span class="exr-muted">Total</span><b id="k_tot">$ 0.00</b></div>
+        </div>
+
+        <div class="exr-muted exr-small" style="margin-top:10px;">
+          Tarifa: $/kg escalonado + mínimo por bulto ($7500 c/u). Seguro 1% (min 20k / max 80k) según valor declarado.
+        </div>
+      </section>
+
+      <section class="exr-pro-card">
+        <h2 class="exr-pro-section-title">Bultos + Seguro</h2>
+
+        <div class="exr-pro-row" style="margin-bottom:10px;">
+          <label class="exr-pro-field" style="min-width:320px;">
+            Presets de bulto
+            <select class="exr-pro-select" id="preset_bulto">
+              <option value="">Seleccionar…</option>
+              <option value="SOBRE">Sobre (15×25×1cm, 0.5kg)</option>
+              <option value="BOX_S">BOX Small (15×10×10cm, 5kg)</option>
+              <option value="BOX_M">BOX Medium (40×30×30cm, 15kg)</option>
+              <option value="BOX_L">BIG BOX (70×50×50cm, 35kg)</option>
+              <option value="BOLSA_10">BOLSA 10KG (hasta 10kg)</option>
+              <option value="BOLSA_20">BOLSA 20KG (hasta 20kg)</option>
+              <option value="SILLA">Silla (50×50×90cm, 6kg)</option>
+              <option value="BICI">Bicicleta (170×25×90cm, 15kg)</option>
+            </select>
+          </label>
+
+          <button class="exr-pro-btn" id="btnAddPreset">Agregar preset</button>
+          <button class="exr-pro-btn" id="btnAddOne">+ 1 línea</button>
+          <button class="exr-pro-btn warn" id="btnClear">Limpiar líneas</button>
+        </div>
+
+        <div id="items"></div>
+
+        <div class="cg-formgrid" style="margin-top:10px;">
+          <label class="exr-pro-field">Valor declarado
+            <input class="exr-pro-input" id="valor_declarado" placeholder="Ej: 50000" />
+            <div class="exr-muted exr-small">Seguro 1% (mín $20.000 / máx $80.000)</div>
+          </label>
+
+          <label class="exr-pro-field">Seguro (auto)
+            <input class="exr-pro-input" id="valor_seguro" placeholder="(auto)" disabled />
+            <div class="exr-muted exr-small">Se calcula con el valor declarado.</div>
+          </label>
+        </div>
+
+        <div class="exr-muted exr-small" style="margin-top:10px;">
+          Cada línea representa un tipo de bulto: cantidad + peso + medidas. El sistema suma todo.
+        </div>
+      </section>
+    </section>
+
+    <section class="cg-grid-mid">
+      <section class="exr-pro-card">
+        <h2 class="exr-pro-section-title">Remitente</h2>
+        <div class="cg-formgrid">
+          <label class="exr-pro-field">Nombre
+            <input class="exr-pro-input" id="remitente_nombre" placeholder="Nombre y apellido" />
+          </label>
+          <label class="exr-pro-field">Teléfono
+            <input class="exr-pro-input" id="remitente_tel" placeholder="Ej: 11 5555-5555" />
+          </label>
+          <label class="exr-pro-field">DNI/CUIT
+            <input class="exr-pro-input" id="remitente_dni" placeholder="Opcional" />
+          </label>
+        </div>
+      </section>
+
+      <section class="exr-pro-card">
+        <h2 class="exr-pro-section-title">Destinatario</h2>
+        <div class="cg-formgrid">
+          <label class="exr-pro-field">Nombre
+            <input class="exr-pro-input" id="destinatario_nombre" placeholder="Nombre y apellido" />
+          </label>
+          <label class="exr-pro-field">Teléfono
+            <input class="exr-pro-input" id="destinatario_tel" placeholder="Ej: 261 555-5555" />
+          </label>
+          <label class="exr-pro-field">DNI/CUIT
+            <input class="exr-pro-input" id="destinatario_dni" placeholder="Opcional" />
+          </label>
+          <label class="exr-pro-field" style="grid-column:1/-1;">Dirección
+            <input class="exr-pro-input" id="destinatario_dir" placeholder="Calle, nro, piso, localidad" />
+          </label>
+        </div>
+      </section>
+    </section>
+
+    <section class="cg-grid-bottom">
+      <section class="exr-pro-card">
+        <h2 class="exr-pro-section-title">Pago</h2>
+
+        <div class="cg-formgrid">
+          <label class="exr-pro-field">Forma de cobro
+            <select class="exr-pro-select" id="forma_pago">
+              <option value="ORIGEN">Cobrar en ORIGEN</option>
+              <option value="DESTINO">Cobrar en DESTINO</option>
+            </select>
+          </label>
+
+          <label class="exr-pro-field">Método de pago (si cobra en ORIGEN)
+            <select class="exr-pro-select" id="metodo_pago">
+              <option value="EFECTIVO">Efectivo</option>
+              <option value="MERCADO_PAGO">QR Mercado Pago</option>
+              <option value="POS">Terminal POS</option>
+            </select>
+            <div class="exr-muted exr-small">Si es DESTINO, el método puede quedar pendiente.</div>
+          </label>
+
+          <label class="exr-pro-field">Estado de pago
+            <select class="exr-pro-select" id="estado_pago">
+              <option value="PENDIENTE">PENDIENTE</option>
+              <option value="PAGADO">PAGADO</option>
+            </select>
+          </label>
+
+          <label class="exr-pro-row" style="grid-column:1/-1;">
+            <input type="checkbox" id="confirmar_pago" style="width:auto; margin:0;" />
+            Confirmo que recibí/acredité el pago (para guardar como PAGADO)
+          </label>
+
+          <div class="cg-pay-hint" style="grid-column:1/-1;">
+            <div class="exr-muted exr-small">
+              Próximo paso (FASE pagos): generar QR MP / integrar POS para marcar “PAGADO” automáticamente. Por ahora, el operador confirma manualmente.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="exr-pro-card">
+        <h2 class="exr-pro-section-title">Crear</h2>
+        <div class="exr-pro-row">
+          <button class="exr-pro-btn ok" id="btnCrear" disabled>Crear guía</button>
+          <div class="exr-pro-pill" id="status">Listo</div>
+        </div>
+        <pre class="cg-pre" id="out" style="display:none;"></pre>
+        <div class="exr-muted exr-small" style="margin-top:10px;">
+          El botón se habilita si la cotización es válida y, si elegís PAGADO, confirmás cobro.
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <script src="/crear_guia.js?v=9301"></script>
+</body>
+</html>

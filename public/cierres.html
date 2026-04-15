@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EXR — Cierres</title>
+<link rel="stylesheet" href="/css/exr_ui.css" />
+  <style>
+    .cierres-actions{
+      justify-content:flex-end;
+    }
+
+    .cierres-summary{
+      color:var(--muted);
+      font-size:12px;
+    }
+
+    @media (max-width: 980px){
+      .cierres-actions{
+        justify-content:flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="exr-pro-wrap">
+    <header class="exr-pro-topbar">
+      <div class="exr-pro-brand">
+        <div class="exr-pro-logo">
+          <img src="/assets/exr_logo.png" alt="EXR" />
+        </div>
+        <div style="min-width:0;">
+          <h1 class="exr-pro-title">Cierres</h1>
+          <div class="exr-pro-subtitle">Operación diaria, consolidación y reimpresión</div>
+        </div>
+      </div>
+
+      <div class="exr-pro-row">
+        <span class="exr-pro-chip" id="chipUser">—</span>
+        <button class="exr-pro-btn" id="btnVolverPanel">Volver</button>
+      </div>
+    </header>
+
+    <section class="exr-pro-card" style="margin-top:14px;">
+      <div class="exr-pro-toolbar">
+        <div class="exr-pro-row">
+          <div class="exr-pro-field" style="min-width:220px;">
+            <label for="fecha">Fecha operativa</label>
+            <input class="exr-pro-input" id="fecha" type="date" />
+          </div>
+          <button class="exr-pro-btn" id="btn_refresh">Actualizar</button>
+        </div>
+
+        <div class="exr-pro-row cierres-actions">
+          <button class="exr-pro-btn" id="btn_preview_mi">Preview mi sucursal</button>
+          <button class="exr-pro-btn ok" id="btn_cerrar_mi">Cerrar mi sucursal</button>
+          <button class="exr-pro-btn" id="btn_preview_global">Preview GLOBAL</button>
+          <button class="exr-pro-btn bad" id="btn_cerrar_global">Cerrar GLOBAL</button>
+        </div>
+      </div>
+
+      <div id="flashBox" style="display:none;"></div>
+      <div id="estadoBox" class="exr-pro-msg info"></div>
+    </section>
+
+    <section class="exr-pro-grid-main" style="margin-top:14px;">
+      <div class="exr-pro-stack">
+        <section class="exr-pro-card">
+          <div class="exr-pro-row" style="justify-content:space-between;margin-bottom:10px;">
+            <h2 class="exr-pro-section-title">Estado por sucursal</h2>
+            <div class="cierres-summary">Preview, cierre y comprobante</div>
+          </div>
+
+          <div class="exr-pro-table-wrap">
+            <table class="exr-pro-table">
+              <thead>
+                <tr>
+                  <th>Sucursal</th>
+                  <th>Estado</th>
+                  <th>Cerrado en</th>
+                  <th>Cierre ID</th>
+                  <th>Resumen</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tb"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="exr-pro-hint">
+          Flujo recomendado: primero <b>Preview</b>, luego <b>Cerrar sucursal</b>. El cierre <b>GLOBAL</b> solo se habilita cuando todas las sucursales del día ya están cerradas.
+        </div>
+      </div>
+
+      <div class="exr-pro-stack">
+        <section class="exr-pro-card">
+          <div class="exr-pro-row" style="justify-content:space-between;margin-bottom:10px;">
+            <h2 class="exr-pro-section-title">Preview de cierre</h2>
+            <div class="cierres-summary">Validación previa</div>
+          </div>
+
+          <div id="previewBox" class="exr-pro-empty">
+            Sin preview cargado.
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <script src="/cierres.js?v=4"></script>
+</body>
+</html>

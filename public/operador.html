@@ -87,11 +87,10 @@
 
       <!-- Accesos rápidos (PRO) -->
       <div class="topActions">
-        <a class="btnLink btnDash" href="/dashboard.html" target="_blank" rel="noopener noreferrer" title="Dashboard Operativo">
-          <span class="btnIcon">📊</span>
-          Dashboard
+        <a class="btnLink btnDash" href="/bandeja.html" title="Bandeja">
+          <span class="btnIcon">📦</span>
+         Bandeja
         </a>
-
         <a class="btnLink btnExec" href="/dashboard_ejecutivo.html" target="_blank" rel="noopener noreferrer" title="Dashboard Ejecutivo">
           <span class="btnIcon">🏢</span>
           Ejecutivo
@@ -194,6 +193,17 @@
     return data;
   }
 
+  async function goPanelIfLogged(){
+  const t = token();
+  if(!t) return;
+  try{
+    await api("/test-auth", { method:"GET" });
+    location.href = "/panel.html";
+  }catch(e){
+    clearToken();
+  }
+}
+
   function showApp(isLogged){
     $("appBox").style.display = isLogged ? "block" : "none";
     $("btnLogout").style.display = isLogged ? "inline-block" : "none";
@@ -223,8 +233,8 @@
       }
 
       setToken(data.token);
-      showApp(true);
-      setMsg("ok", "Login OK");
+      location.href = "/panel.html";
+     return;
     }catch(e){
       showApp(false);
       setMsg("err", e.message);
@@ -351,8 +361,8 @@
   $("btnClear").addEventListener("click", limpiar);
   $("btnPrint").addEventListener("click", imprimirEtiqueta);
 
-  $("btnBandeja").addEventListener("click", () => location.href="/bandeja.html");
-  $("btnIrBandeja").addEventListener("click", () => location.href="/bandeja.html");
+$("btnBandeja").addEventListener("click", () => location.href="/panel.html");
+$("btnIrBandeja").addEventListener("click", () => location.href="/panel.html");
 
   $("password").addEventListener("keydown", (e) => { if(e.key === "Enter") login(); });
   $("numeroGuia").addEventListener("keydown", (e) => { if(e.key === "Enter") buscar(); });
@@ -363,9 +373,7 @@
     $("numeroGuia").value = hash;
   }
 
-  if(token()){
-    showApp(true);
-  }
+goPanelIfLogged();
 </script>
 </body>
 </html>

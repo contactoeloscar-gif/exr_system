@@ -11,19 +11,18 @@ function normUser(v) {
 }
 
 router.post("/login", async (req, res) => {
-  const usuarioIn = normUser(req.body?.usuario);
-  const password = String(req.body?.password || "");
-
-  if (!usuarioIn || !password) {
-    return res.status(400).json({ ok: false, error: "Faltan datos" });
-  }
-
   try {
+    const usuarioIn = normUser(req.body?.usuario);
+    const password = String(req.body?.password || "");
+
+    if (!usuarioIn || !password) {
+      return res.status(400).json({ ok: false, error: "Faltan datos" });
+    }
+
     // ✅ Traemos rol + activo + sucursal_id
-    // Opcional: permitir login por email también (sin romper tu flujo actual)
     const r = await pool.query(
       `SELECT id, sucursal_id, usuario, email, rol, password_hash, activo
-       FROM usuarios
+       FROM public.usuarios
        WHERE usuario = $1 OR email = $1
        LIMIT 1`,
       [usuarioIn]
@@ -35,12 +34,18 @@ router.post("/login", async (req, res) => {
 
     const u = r.rows[0];
 
-    // ✅ activo puede venir NULL, lo tratamos como true por compatibilidad
+    // Si activo es false → bloqueamos
     if (u.activo === false) {
       return res.status(403).json({ ok: false, error: "Usuario desactivado" });
     }
 
+    // Si no tiene hash → error claro
+    if (!u.password_hash) {
+      return res.status(500).json({ ok: false, error: "Usuario sin password_hash" });
+    }
+
     const ok = await bcrypt.compare(password, u.password_hash);
+
     if (!ok) {
       return res.status(401).json({ ok: false, error: "Credenciales inválidas" });
     }
@@ -50,16 +55,21 @@ router.post("/login", async (req, res) => {
         user_id: u.id,
         sucursal_id: u.sucursal_id ?? null,
         usuario: u.usuario,
-        rol: String(u.rol || "").toUpperCase(), // ✅ NUEVO: rol en JWT
+        rol: String(u.rol || "").toUpperCase(),
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES || "12h" }
     );
 
     return res.json({ ok: true, token });
+
   } catch (e) {
-    console.error("POST /auth/login error:", e);
-    return res.status(500).json({ ok: false, error: "server_error" });
+    console.error("[AUTH] LOGIN ERROR:", e);
+    return res.status(500).json({
+      ok: false,
+      error: "server_error",
+      detail: e.message,
+    });
   }
 });
 

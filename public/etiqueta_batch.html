@@ -5,31 +5,91 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Impresión por bultos | EXR</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 16px; }
-    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    .muted { opacity:.75; }
-    button { padding: 8px 12px; cursor:pointer; }
-    iframe { width: 420px; height: 700px; border: 1px solid #ddd; margin-top: 12px; }
-    @media print { body { display:none; } }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 16px;
+      background: #fff;
+      color: #111;
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .muted {
+      opacity: .75;
+    }
+
+    button, select {
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    button.ok {
+      background: #0f9d58;
+      color: #fff;
+      border: 1px solid #0f9d58;
+      border-radius: 8px;
+    }
+
+    button.secondary {
+      background: #fff;
+      color: #111;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+
+    iframe {
+      width: 420px;
+      height: 700px;
+      border: 1px solid #ddd;
+      margin-top: 12px;
+      background: #fff;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media print {
+      body {
+        display: none;
+      }
+    }
   </style>
 </head>
 <body>
+  <!-- MARK: BATCH_V3001 -->
   <div class="row">
-  <div><b>EXR</b> · Impresión por bultos</div>
-  <div class="muted" id="status">Preparando…</div>
+    <div><b>EXR</b> · Impresión por bultos</div>
+    <div class="muted" id="status">Preparando…</div>
 
-  <label style="display:flex;align-items:center;gap:8px;">
-    <input type="checkbox" id="safeMode" checked />
-    Modo seguro
-  </label>
+    <label class="row" style="gap:8px;">
+      <span>Modo</span>
+      <select id="printMode">
+        <option value="thermal">Térmica</option>
+        <option value="a4">A4</option>
+      </select>
+    </label>
 
-  <button id="btnNext" type="button" disabled>Continuar</button>
-  <button id="btnRetry" type="button" disabled>Reintentar</button>
-  <button id="btnCancel" type="button">Cancelar</button>
-</div>
+    <label class="row" style="gap:8px;" id="safeWrap">
+      <input type="checkbox" id="safeMode" checked />
+      Modo seguro
+    </label>
+
+    <button id="btnThermal" type="button" class="ok">Imprimir térmica</button>
+    <button id="btnPrintA4" type="button" class="secondary">Imprimir A4</button>
+
+    <button id="btnNext" type="button" disabled>Continuar</button>
+    <button id="btnRetry" type="button" disabled>Reintentar</button>
+    <button id="btnCancel" type="button">Cancelar</button>
+  </div>
 
   <iframe id="frame" title="Etiqueta"></iframe>
 
-  <script src="/etiqueta_batch.js"></script>
+  <script src="/etiqueta_batch.js?v=3001"></script>
 </body>
 </html>
