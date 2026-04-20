@@ -51,6 +51,10 @@
       background:#a33636;
       border-color:#a33636;
     }
+    button:disabled {
+      opacity:.55;
+      cursor:not-allowed;
+    }
     .toolbar { display:grid; grid-template-columns: 1.1fr 1fr 1fr auto; gap:10px; margin-bottom:12px; }
     .table-wrap { overflow:auto; border:1px solid #29323c; border-radius:12px; }
     table { width:100%; border-collapse:collapse; min-width:1020px; }
@@ -133,6 +137,37 @@
       background:#11161d;
     }
     .section-spacer { margin-top:14px; }
+
+    .hint-box {
+      margin-top:10px;
+      padding:12px;
+      border:1px solid #33404d;
+      border-radius:12px;
+      background:#11161d;
+      color:#d7dde4;
+      font-size:13px;
+      line-height:1.45;
+    }
+
+    .section-block {
+      margin-top:14px;
+      padding:12px;
+      border:1px solid #29323c;
+      border-radius:12px;
+      background:#10151b;
+    }
+
+    .section-block + .section-block {
+      margin-top:14px;
+    }
+
+    .section-caption {
+      color:#8fb4c9;
+      font-size:12px;
+      margin-top:6px;
+      margin-bottom:10px;
+    }
+
     @media (max-width: 1100px) {
       .grid { grid-template-columns:1fr; }
       .detail-meta { grid-template-columns:repeat(2,1fr); }
@@ -250,6 +285,12 @@
           </table>
         </div>
 
+        <div id="lotesPager" class="section-spacer" style="display:flex; gap:8px; align-items:center; justify-content:flex-end;">
+          <button id="btnPrevLotes" class="secondary" type="button">Anterior</button>
+          <span id="lotesPagerInfo" class="muted">Página 1 de 1</span>
+          <button id="btnNextLotes" class="secondary" type="button">Siguiente</button>
+        </div>
+
         <div id="listStatus" class="status"></div>
       </section>
     </div>
@@ -271,6 +312,10 @@
         </div>
       </div>
 
+      <div id="detailWorkflowHint" class="hint-box">
+        Seleccioná un lote para ver la acción operativa correspondiente.
+      </div>
+
       <div class="detail-meta">
         <div class="meta-box"><div class="meta-k">Tipo</div><div class="meta-v" id="mTipo">-</div></div>
         <div class="meta-box"><div class="meta-k">Estado</div><div class="meta-v" id="mEstado">-</div></div>
@@ -285,40 +330,109 @@
 
       <div class="split">
         <div>
-          <div id="addGuiaWrap">
-            <div class="mini-title">Agregar guía por número</div>
+          <div id="sectionAbierto" class="section-block">
+            <div class="mini-title">Operación de lote ABIERTO</div>
+            <div class="section-caption">
+              En este estado podés agregar o quitar guías del lote.
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+              <div class="mini-title" style="margin-bottom:0;">Guías disponibles para agregar</div>
+              <div class="badge">Disponibles: <span id="countGuiasDisponibles">0</span></div>
+            </div>
 
             <div class="form-grid">
               <div class="full">
-                <label for="numero_guia_add">Número de guía</label>
-                <input id="numero_guia_add" type="text" placeholder="Ej: EXR-000123" />
+                <label for="f_disponibles_q">Buscar guía disponible</label>
+                <input id="f_disponibles_q" type="text" placeholder="Número, remitente o destinatario" />
               </div>
               <div>
-                <button id="btnBuscarGuia" class="secondary">Buscar guía</button>
+                <button id="btnRefrescarDisponibles" class="secondary" type="button">Refrescar disponibles</button>
               </div>
               <div>
-                <button id="btnAgregarGuia" disabled>Agregar al lote</button>
+                <button id="btnAgregarSeleccionadas" type="button">Agregar seleccionadas</button>
+              </div>
+              <div>
+                <button id="btnMarcarTodasDisponibles" class="secondary" type="button">Marcar todas</button>
+              </div>
+              <div>
+                <button id="btnDesmarcarTodasDisponibles" class="secondary" type="button">Desmarcar</button>
               </div>
             </div>
 
-            <div id="guiaEncontradaBox" class="list-box" style="margin-top:10px;">
-              <div class="empty">Buscá una guía por número para agregarla al lote.</div>
+            <div id="guiasDisponiblesWrap" class="list-box" style="margin-top:10px;">
+              <div class="empty">Seleccioná un lote ABIERTO para ver guías disponibles.</div>
+            </div>
+
+            <div class="section-spacer">
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                <div class="mini-title" style="margin-bottom:0;">Guías ya agregadas al lote</div>
+                <div class="badge">Agregadas: <span id="countGuiasAgregadas">0</span></div>
+              </div>
+
+              <div id="guiasAgregadasWrap" class="list-box">
+                <div class="empty">Todavía no hay guías agregadas al lote.</div>
+              </div>
+            </div>
+
+            <div class="section-spacer">
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                <div class="mini-title" style="margin-bottom:0;">Conflictos al agregar</div>
+                <div class="badge">Conflictos: <span id="countGuiasConflictos">0</span></div>
+              </div>
+
+              <div id="guiasBatchConflictosWrap" class="list-box">
+                <div class="empty">Sin conflictos.</div>
+              </div>
+            </div>
+
+            <div id="addGuiaWrap" class="section-spacer">
+              <div class="mini-title">Agregar guía por número</div>
+
+              <div class="form-grid">
+                <div class="full">
+                  <label for="numero_guia_add">Número de guía</label>
+                  <input id="numero_guia_add" type="text" placeholder="Ej: EXR-000123" />
+                </div>
+                <div>
+                  <button id="btnBuscarGuia" class="secondary">Buscar guía</button>
+                </div>
+                <div>
+                  <button id="btnAgregarGuia" disabled>Agregar al lote</button>
+                </div>
+              </div>
+
+              <div id="guiaEncontradaBox" class="list-box" style="margin-top:10px;">
+                <div class="empty">Buscá una guía por número para agregarla al lote.</div>
+              </div>
             </div>
           </div>
 
-          <div class="section-spacer mini-title">Recepción</div>
-          <div class="form-grid">
-            <div class="full">
-              <label for="observacion_general">Observación general</label>
-              <textarea id="observacion_general" placeholder="Observación general de recepción"></textarea>
+          <div id="sectionRecepcion" class="section-block" style="display:none;">
+            <div class="mini-title">Recepción del lote</div>
+            <div class="section-caption">
+              Las guías se marcan por defecto como <b>RECIBIDO_OK</b>. Solo cambiá las que tengan novedad.
+            </div>
+
+            <div class="form-grid">
+              <div class="full">
+                <label for="observacion_general">Observación general</label>
+                <textarea id="observacion_general" placeholder="Observación general de recepción"></textarea>
+              </div>
             </div>
           </div>
 
-          <div class="section-spacer mini-title">Cierre</div>
-          <div class="form-grid">
-            <div class="full">
-              <label for="observacion_cierre">Observación de cierre</label>
-              <input id="observacion_cierre" type="text" placeholder="Observación de cierre (opcional)" />
+          <div id="sectionCierre" class="section-block" style="display:none;">
+            <div class="mini-title">Cierre del lote</div>
+            <div class="section-caption">
+              Cuando el lote ya está recibido, podés cerrarlo operativamente.
+            </div>
+
+            <div class="form-grid">
+              <div class="full">
+                <label for="observacion_cierre">Observación de cierre</label>
+                <input id="observacion_cierre" type="text" placeholder="Observación de cierre (opcional)" />
+              </div>
             </div>
           </div>
         </div>
@@ -335,6 +449,6 @@
     </section>
   </div>
 
-  <script src="/lotes.js"></script>
+  <script src="/lotes.js?v=2"></script>
 </body>
 </html>

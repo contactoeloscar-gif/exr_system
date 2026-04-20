@@ -1,7 +1,7 @@
 (() => {
   const $ = (id) => document.getElementById(id);
 
-  console.log("BANDEJA_V2 P15.3 CARGADA", new Date().toISOString());
+  console.log("BANDEJA_V2 P17.2 CARGADA", new Date().toISOString());
 
   /* =========================
      HELPERS UI
@@ -71,21 +71,92 @@
 
     if (forma === "ORIGEN") {
       if (estado === "observado") return "OBSERVADO";
+      if (estado === "pendiente_origen") return "PENDIENTE";
+      if (["pagado", "pagado_origen", "no_aplica"].includes(estado)) return "PAGADO";
       return "PAGADO";
     }
 
     if (forma === "DESTINO") {
-      if (estado === "cobrado_destino" || estado === "rendido") return "PAGADO";
       if (estado === "observado") return "OBSERVADO";
+      if (estado === "pendiente_destino") return "PENDIENTE";
+      if (estado === "cobrado_destino" || estado === "rendido") return "PAGADO";
       return "PENDIENTE";
     }
 
-    if (estado === "cobrado_destino" || estado === "rendido") return "PAGADO";
-    if (estado === "pendiente_destino" || estado === "pendiente_origen") return "PENDIENTE";
     if (estado === "observado") return "OBSERVADO";
-    if (estado === "no_aplica") return "PAGADO";
+    if (estado === "pendiente_destino" || estado === "pendiente_origen") return "PENDIENTE";
+    if (["cobrado_destino", "rendido", "pagado", "pagado_origen", "no_aplica"].includes(estado)) return "PAGADO";
 
     return data?.estado_pago || "-";
+  }
+
+  function getEstadoDerivado(g) {
+    return g?.estado_derivado && typeof g.estado_derivado === "object"
+      ? g.estado_derivado
+      : null;
+  }
+
+  function firstMsg(arr) {
+    return Array.isArray(arr) && arr.length
+      ? (arr[0]?.mensaje || arr[0]?.codigo || "")
+      : "";
+  }
+
+  function hasCode(arr, code) {
+    return Array.isArray(arr) && arr.some(x => String(x?.codigo || "").toUpperCase() === String(code || "").toUpperCase());
+  }
+
+  function badgeText(label, cls = "") {
+    return `<span class="badge ${cls}">${esc(label)}</span>`;
+  }
+
+  function operativaText(key) {
+    const map = {
+      PENDIENTE_DESPACHO: "Pendiente despacho",
+      EN_TRANSITO: "En tránsito",
+      PENDIENTE_COBRO_DESTINO: "No entregar sin cobro",
+      LISTA_PARA_ENTREGA: "Lista para entrega",
+      ENTREGADA: "Entregada",
+      OBSERVADA: "Requiere revisión",
+      PENDIENTE_PAGO_ORIGEN: "No despachar sin cobro origen",
+      EN_VIAJE: "En viaje",
+      EN_CENTRAL: "En central",
+      CENTRAL_OBSERVADO: "Central observado",
+      EXCEPCION_AUTORIZADA: "Excepción autorizada",
+      PENDIENTE_RENDICION: "Pte. rendición CC",
+      RENDIDO: "Rendido",
+      SIN_CLASIFICAR: "Sin clasificar"
+    };
+    return map[String(key || "").toUpperCase()] || (key || "—");
+  }
+
+  function operativaClass(key) {
+    const k = String(key || "").toUpperCase();
+    if (["PENDIENTE_COBRO_DESTINO", "OBSERVADA", "PENDIENTE_PAGO_ORIGEN", "CENTRAL_OBSERVADO"].includes(k)) return "bad";
+    if (["LISTA_PARA_ENTREGA", "ENTREGADA", "RENDIDO", "EN_CENTRAL"].includes(k)) return "ok";
+    if (["PENDIENTE_DESPACHO", "EN_TRANSITO", "EN_VIAJE", "EXCEPCION_AUTORIZADA", "PENDIENTE_RENDICION"].includes(k)) return "warn";
+    return "";
+  }
+
+  function contableText(key) {
+    const map = {
+      NO_APLICA: "Contable N/A",
+      PENDIENTE_RENDICION: "Contable: pte. rendición",
+      RENDIDA_SIN_CIERRE: "Contable: rendida sin cierre",
+      LIQUIDABLE: "Contable: liquidable",
+      EN_LIQUIDACION: "Contable: en liquidación",
+      APROBADA_PENDIENTE_REGISTRO: "Contable: aprobada",
+      REGISTRADA_PENDIENTE_CONCILIACION: "Contable: pte. conciliación",
+      CONCILIADA: "Contable: conciliada"
+    };
+    return map[String(key || "").toUpperCase()] || (key || "—");
+  }
+
+  function contableClass(key) {
+    const k = String(key || "").toUpperCase();
+    if (["CONCILIADA"].includes(k)) return "ok";
+    if (["PENDIENTE_RENDICION", "RENDIDA_SIN_CIERRE", "LIQUIDABLE", "EN_LIQUIDACION", "APROBADA_PENDIENTE_REGISTRO", "REGISTRADA_PENDIENTE_CONCILIACION"].includes(k)) return "warn";
+    return "";
   }
 
   /* =========================
@@ -308,7 +379,11 @@
     const visible = pagoVisible(data);
     const estadoTecnico = normalizeLower(data?.estado_pago);
     const metodo = data?.metodo_pago;
-    const rendido = !!data?.rendido_at;
+
+    const rendido =
+      data?.rendido_bool === true ||
+      String(data?.rendicion_estado || "").toUpperCase() === "RENDIDO" ||
+      !!data?.rendido_at;
 
     let cls = "";
     if (visible === "PAGADO") cls = "ok";
@@ -326,7 +401,7 @@
   /* =========================
      OPERATIVA
   ========================= */
-  function deriveOperativa(g) {
+  function deriveOperativaLegacy(g) {
     const estadoLog = normalizeUpper(g.estado_logistico);
     const estadoPago = normalizeLower(g.estado_pago);
 
@@ -336,9 +411,18 @@
     const esPagoDestino = condicionPago === "DESTINO" || tipoCobro === "DESTINO";
     const esPagoOrigen = condicionPago === "ORIGEN" || tipoCobro === "ORIGEN";
 
-    const rendido = !!g.rendido_at;
+    const rendido =
+      g.rendido_bool === true ||
+      String(g.rendicion_estado || "").toUpperCase() === "RENDIDO" ||
+      !!g.rendido_at ||
+      estadoPago === "rendido";
+
+    const pendienteRendicion =
+      g.rendicion_pendiente === true ||
+      String(g.rendicion_estado || "").toUpperCase() === "PENDIENTE";
 
     const cobroConfirmado =
+      rendido ||
       estadoPago === "cobrado_destino" ||
       estadoPago === "pagado" ||
       estadoPago === "pagado_origen" ||
@@ -369,8 +453,9 @@
       );
 
     const puedeRendir =
+      isOwnerOrAdminUser() &&
       esPagoDestino &&
-      estadoPago === "cobrado_destino" &&
+      pendienteRendicion &&
       !rendido;
 
     const listaParaEntrega =
@@ -399,13 +484,14 @@
       estadoOperativo = "ENTREGADA";
     }
 
-    if (puedeRendir) {
-      estadoOperativo = "PENDIENTE_RENDICION";
-    } else if (rendido) {
+    if (rendido) {
       estadoOperativo = "RENDIDO";
+    } else if (pendienteRendicion) {
+      estadoOperativo = "PENDIENTE_RENDICION";
     }
 
     return {
+      source: "legacy",
       estadoLog,
       estadoPago,
       condicionPago,
@@ -416,6 +502,7 @@
       tieneExcepcion,
       bloqueadoPorPagoOrigen,
       rendido,
+      pendienteRendicion,
       puedeDespachar,
       puedeRecibirDestino,
       puedeCobrar,
@@ -423,6 +510,111 @@
       puedeRendir,
       listaParaEntrega,
       estadoOperativo,
+      situacionOperativa: estadoOperativo,
+      situacionContable: pendienteRendicion
+        ? "PENDIENTE_RENDICION"
+        : (rendido ? "RENDIDA_SIN_CIERRE" : "NO_APLICA"),
+      accionPrincipal:
+        puedeDespachar ? "DESPACHAR" :
+        puedeRecibirDestino ? "RECIBIR_DESTINO" :
+        puedeCobrar ? "REGISTRAR_COBRO" :
+        puedeRendir ? "RENDIR_COBRO" :
+        puedeEntregar ? "ENTREGAR" : "VER_DETALLE",
+      resumenCorto: "",
+      bloqueos: [],
+      alertas: [],
+      cierreEstado: "SIN_CIERRE",
+      liquidacionEstado: "NO_APLICA",
+      conciliacionEstado: "NO_APLICA"
+    };
+  }
+
+  function deriveOperativa(g) {
+    const der = getEstadoDerivado(g);
+    if (!der) return deriveOperativaLegacy(g);
+
+    const estadoLog = normalizeUpper(g.estado_logistico);
+    const estadoPago = normalizeLower(g.estado_pago);
+    const condicionPago = normalizeUpper(g.condicion_pago);
+    const tipoCobro = normalizeUpper(g.tipo_cobro);
+
+    const esPagoDestino = condicionPago === "DESTINO" || tipoCobro === "DESTINO";
+    const esPagoOrigen = condicionPago === "ORIGEN" || tipoCobro === "ORIGEN";
+
+    const situacionOperativa = normalizeUpper(der.situacion_operativa);
+    const situacionContable = normalizeUpper(der.situacion_contable);
+    const accionPrincipal = normalizeUpper(der.accion_principal);
+
+    const bloqueos = Array.isArray(der.bloqueos) ? der.bloqueos : [];
+    const alertas = Array.isArray(der.alertas) ? der.alertas : [];
+
+    const tieneExcepcion =
+      hasCode(alertas, "EXCEPCION_ENTREGA") ||
+      estadoPago === "observado";
+
+    const bloqueadoPorPagoOrigen =
+      esPagoOrigen &&
+      estadoPago === "pendiente_origen";
+
+    const pendienteRendicion = situacionContable === "PENDIENTE_RENDICION";
+
+    const rendido =
+      !!g.rendido_at ||
+      estadoPago === "rendido" ||
+      [
+        "RENDIDA_SIN_CIERRE",
+        "LIQUIDABLE",
+        "EN_LIQUIDACION",
+        "APROBADA_PENDIENTE_REGISTRO",
+        "REGISTRADA_PENDIENTE_CONCILIACION",
+        "CONCILIADA"
+      ].includes(situacionContable);
+
+    const cobroConfirmado =
+      rendido ||
+      estadoPago === "cobrado_destino" ||
+      estadoPago === "pagado" ||
+      estadoPago === "pagado_origen" ||
+      situacionOperativa === "LISTA_PARA_ENTREGA" ||
+      situacionOperativa === "ENTREGADA" ||
+      (esPagoOrigen && estadoPago === "no_aplica");
+
+    const puedeDespachar = accionPrincipal === "DESPACHAR";
+    const puedeRecibirDestino = accionPrincipal === "RECIBIR_DESTINO";
+    const puedeCobrar = accionPrincipal === "REGISTRAR_COBRO";
+    const puedeEntregar = accionPrincipal === "ENTREGAR";
+    const puedeRendir = accionPrincipal === "RENDIR_COBRO";
+    const listaParaEntrega = situacionOperativa === "LISTA_PARA_ENTREGA";
+
+    return {
+      source: "estado_derivado",
+      estadoLog,
+      estadoPago,
+      condicionPago,
+      tipoCobro,
+      esPagoDestino,
+      esPagoOrigen,
+      cobroConfirmado,
+      tieneExcepcion,
+      bloqueadoPorPagoOrigen,
+      rendido,
+      pendienteRendicion,
+      puedeDespachar,
+      puedeRecibirDestino,
+      puedeCobrar,
+      puedeEntregar,
+      puedeRendir,
+      listaParaEntrega,
+      estadoOperativo: situacionOperativa || "SIN_CLASIFICAR",
+      situacionOperativa,
+      situacionContable,
+      accionPrincipal,
+      resumenCorto: der.resumen_corto || "",
+      bloqueos,
+      alertas,
+      cierreEstado: normalizeUpper(der.cierre_estado),
+      liquidacionEstado: normalizeUpper(der.liquidacion_estado),
+      conciliacionEstado: normalizeUpper(der.conciliacion_estado)
     };
   }
 
@@ -441,26 +633,39 @@
     const op = deriveOperativa(g);
     const out = [];
 
-    if (op.esPagoDestino && op.estadoPago === "pendiente_destino") {
-      out.push(`<span class="badge bad">NO ENTREGAR SIN COBRO</span>`);
+    out.push(badgeText(
+      operativaText(op.situacionOperativa || op.estadoOperativo),
+      operativaClass(op.situacionOperativa || op.estadoOperativo)
+    ));
+
+    if (op.situacionContable && op.situacionContable !== "NO_APLICA") {
+      out.push(badgeText(contableText(op.situacionContable), contableClass(op.situacionContable)));
     }
-    if (op.listaParaEntrega) {
-      out.push(`<span class="badge ok">LISTA PARA ENTREGA</span>`);
-    }
-    if (op.tieneExcepcion) {
-      out.push(`<span class="badge warn">EXCEPCIÓN AUTORIZADA</span>`);
-    }
-    if (op.bloqueadoPorPagoOrigen) {
-      out.push(`<span class="badge bad">NO DESPACHAR SIN COBRO ORIGEN</span>`);
-    }
-    if (op.puedeRendir) {
-      out.push(`<span class="badge warn">PENDIENTE RENDICIÓN</span>`);
-    }
-    if (op.rendido) {
-      out.push(`<span class="badge ok">RENDIDO</span>`);
+
+    if (firstMsg(op.bloqueos)) {
+      out.push(badgeText(firstMsg(op.bloqueos), "bad"));
+    } else if (firstMsg(op.alertas)) {
+      out.push(badgeText(firstMsg(op.alertas), "warn"));
     }
 
     return out.join(" ");
+  }
+
+  function renderEstadoMeta(g) {
+    const op = deriveOperativa(g);
+    const bits = [];
+
+    if (op.resumenCorto) {
+      bits.push(`<div class="muted" style="font-size:12px">${esc(op.resumenCorto)}</div>`);
+    }
+
+    if (firstMsg(op.bloqueos)) {
+      bits.push(`<div class="muted" style="font-size:12px">Bloqueo: ${esc(firstMsg(op.bloqueos))}</div>`);
+    } else if (firstMsg(op.alertas)) {
+      bits.push(`<div class="muted" style="font-size:12px">Alerta: ${esc(firstMsg(op.alertas))}</div>`);
+    }
+
+    return bits.join("");
   }
 
   function montoSugeridoCobro(g) {
@@ -593,7 +798,7 @@
     const selEstLog = $("f_estado_log")?.value || "";
     const estado_logistico = (activeTab !== "ALL") ? activeTab : (selEstLog || "");
 
-    let estado_pago = $("f_estado_pago")?.value || "";
+    let estado_pago = normalizeLower($("f_estado_pago")?.value || "");
     let tipo_cobro = $("f_tipo_cobro")?.value || "";
     let sin_metodo = 0;
     let rendicion = "";
@@ -605,13 +810,11 @@
       estado_pago = "cobrado_destino";
       if (!tipo_cobro) tipo_cobro = "DESTINO";
     } else if (quick === "PEND_RENDICION") {
-      estado_pago = "cobrado_destino";
+      estado_pago = "pendiente_rendicion";
       if (!tipo_cobro) tipo_cobro = "DESTINO";
-      rendicion = "pendiente";
     } else if (quick === "RENDIDO") {
-      estado_pago = "cobrado_destino";
+      estado_pago = "rendido";
       if (!tipo_cobro) tipo_cobro = "DESTINO";
-      rendicion = "rendido";
     } else if (quick === "OBSERVADO") {
       estado_pago = "observado";
       if (!tipo_cobro) tipo_cobro = "DESTINO";
@@ -639,7 +842,10 @@
 
   function rowIsBad(g) {
     const op = deriveOperativa(g);
-    return op.esPagoDestino && op.estadoPago === "pendiente_destino";
+    return (
+      ["PENDIENTE_COBRO_DESTINO", "OBSERVADA", "PENDIENTE_PAGO_ORIGEN"].includes(op.situacionOperativa || op.estadoOperativo) ||
+      !!firstMsg(op.bloqueos)
+    );
   }
 
   function renderAcciones(g) {
@@ -663,7 +869,7 @@
     }
 
     if (op.puedeRendir) {
-      btns.push(`<button class="exr-pro-btn ok" data-act="rendir" data-id="${g.id}">Rendir</button>`);
+      btns.push(`<button class="exr-pro-btn" data-act="rendir" data-id="${g.id}">Rendir manual</button>`);
     }
 
     if (op.puedeEntregar) {
@@ -707,24 +913,55 @@
     if (msg) msg.textContent = `Mostrando ${all.length} en esta página (limit ${limit}).`;
 
     tbody.innerHTML = all.map(g => {
+      const op = deriveOperativa(g);
       const nro = esc(g.numero_guia ?? g.id);
       const ruta = `${routeLabel(g)}<div class="muted" style="font-size:12px">${esc(dt(g.created_at))}</div>`;
       const cliente = `
         <div><b>${esc(g.remitente_nombre || "—")}</b> <span class="muted">→</span> <b>${esc(g.destinatario_nombre || "—")}</b></div>
         <div class="muted" style="font-size:12px">${esc(g.remitente_telefono || "")} • ${esc(g.destinatario_telefono || "")}</div>
       `;
+
       const estados = `
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${badgeLog(g.estado_logistico)}
-          ${badgePago(g)}
-          ${badgeOperativa(g)}
+        <div style="display:grid;gap:6px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${badgeLog(g.estado_logistico)}
+            ${badgePago(g)}
+            ${badgeOperativa(g)}
+          </div>
+          ${renderEstadoMeta(g)}
         </div>
       `;
+
       const monto = `
         <div><b>${money(g.monto_total ?? 0)}</b></div>
         <div class="muted" style="font-size:12px">${esc(g.condicion_pago || g.tipo_cobro || "")} • ${esc(pagoVisible(g))}</div>
-        ${(Number(g.monto_cobrar_destino || 0) > 0) ? `<div class="muted" style="font-size:12px">Cobrar destino: ${money(g.monto_cobrar_destino)}</div>` : ""}
+        ${
+          Number(g.monto_cobrar_destino || 0) > 0
+            ? `<div class="muted" style="font-size:12px">Cobrar destino: ${money(g.monto_cobrar_destino)}</div>`
+            : ""
+        }
+        ${
+          op.situacionContable && op.situacionContable !== "NO_APLICA"
+            ? `<div class="muted" style="font-size:12px">${esc(contableText(op.situacionContable))}</div>`
+            : ""
+        }
+        ${
+          op.cierreEstado && op.cierreEstado !== "SIN_CIERRE"
+            ? `<div class="muted" style="font-size:12px">Cierre: ${esc(op.cierreEstado)}</div>`
+            : ""
+        }
+        ${
+          op.liquidacionEstado && op.liquidacionEstado !== "NO_APLICA"
+            ? `<div class="muted" style="font-size:12px">Liquidación: ${esc(op.liquidacionEstado)}</div>`
+            : ""
+        }
+        ${
+          op.conciliacionEstado && op.conciliacionEstado !== "NO_APLICA"
+            ? `<div class="muted" style="font-size:12px">Conciliación: ${esc(op.conciliacionEstado)}</div>`
+            : ""
+        }
       `;
+
       const acciones = renderAcciones(g);
 
       return `
@@ -1028,28 +1265,28 @@
       if (!guia) return;
 
       if (act === "etiqueta_thermal") {
-      const total = Number(guia.cant_bultos || guia.cant_bultos_declarada || 0);
-      const qs = new URLSearchParams({
-      id: String(id),
-      mode: "thermal"
-  });
-      if (total > 0) qs.set("n", String(total));
+        const total = Number(guia.cant_bultos || guia.cant_bultos_declarada || 0);
+        const qs = new URLSearchParams({
+          id: String(id),
+          mode: "thermal"
+        });
+        if (total > 0) qs.set("n", String(total));
 
-      window.open(`/etiqueta_batch.html?${qs.toString()}`, "_blank");
-     return;
-}
+        window.open(`/etiqueta_batch.html?${qs.toString()}`, "_blank");
+        return;
+      }
 
       if (act === "etiqueta_a4") {
-      const total = Number(guia.cant_bultos || guia.cant_bultos_declarada || 0);
-      const qs = new URLSearchParams({
-      id: String(id),
-      mode: "a4"
-  });
-      if (total > 0) qs.set("n", String(total));
+        const total = Number(guia.cant_bultos || guia.cant_bultos_declarada || 0);
+        const qs = new URLSearchParams({
+          id: String(id),
+          mode: "a4"
+        });
+        if (total > 0) qs.set("n", String(total));
 
-      window.open(`/etiqueta_batch.html?${qs.toString()}`, "_blank");
-      return;
-}
+        window.open(`/etiqueta_batch.html?${qs.toString()}`, "_blank");
+        return;
+      }
 
       if (act === "detalle") {
         location.href = `/detalle.html?id=${encodeURIComponent(id)}`;

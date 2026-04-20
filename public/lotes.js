@@ -3,6 +3,9 @@
 
   let currentLote = null;
   let guiaEncontrada = null;
+  let guiasDisponibles = [];
+  let lotesPage = 0;
+  let lotesLimit = 5;
 
   function token() {
     return localStorage.getItem("exr_token") || "";
@@ -48,10 +51,7 @@
     const r = await fetch(url, opts);
     const data = await r.json().catch(() => ({}));
     if (!r.ok || !data?.ok) {
-      const msg =
-        data?.error ||
-        data?.detail ||
-        `Error ${r.status}`;
+      const msg = data?.error || data?.detail || `Error ${r.status}`;
       const err = new Error(msg);
       err.httpStatus = r.status;
       err.payload = data;
@@ -60,9 +60,96 @@
     return data;
   }
 
+  function setCount(id, value) {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = String(Number(value || 0));
+  }
+
   function initDefaults() {
     const fecha = $("fecha_operativa");
     if (fecha) fecha.value = todayYmd();
+  }
+
+  function setBlockVisible(id, visible) {
+    const el = $(id);
+    if (!el) return;
+    el.style.display = visible ? "" : "none";
+  }
+
+  function setWorkflowHint(msg) {
+    const el = $("detailWorkflowHint");
+    if (!el) return;
+    el.innerHTML = msg || "Seleccioná un lote para ver la acción operativa correspondiente.";
+  }
+
+  function focusFirstRecepcionControl() {
+    const first = document.querySelector(".rx-estado");
+    if (!first) return;
+    first.scrollIntoView({ behavior: "smooth", block: "center" });
+    first.focus();
+  }
+
+  function syncDetailMode(lote) {
+    const estado = String(lote?.estado || "").toUpperCase();
+
+    const isAbierto = estado === "ABIERTO";
+    const isDespachado = estado === "DESPACHADO";
+    const isRecibido = estado === "RECIBIDO";
+
+    setBlockVisible("sectionAbierto", isAbierto);
+    setBlockVisible("sectionRecepcion", isDespachado);
+    setBlockVisible("sectionCierre", isRecibido);
+
+    if (!lote?.id) {
+      setWorkflowHint("Seleccioná un lote para ver la acción operativa correspondiente.");
+      return;
+    }
+
+    if (isAbierto) {
+      setWorkflowHint(`
+        <b>Lote ABIERTO.</b>
+        Podés agregar o quitar guías, buscar disponibles y preparar el lote antes de consolidarlo.
+      `);
+      return;
+    }
+
+    if (estado === "CONSOLIDADO") {
+      setWorkflowHint(`
+        <b>Lote CONSOLIDADO.</b>
+        Ya no se agregan guías. El siguiente paso es <b>Despachar</b>.
+      `);
+      return;
+    }
+
+    if (isDespachado) {
+      setWorkflowHint(`
+        <b>Lote DESPACHADO.</b>
+        Abajo, en <b>Guías del lote</b>, completá los controles de recepción.
+        Por defecto todas quedan en <b>RECIBIDO_OK</b>.
+      `);
+      return;
+    }
+
+    if (isRecibido) {
+      setWorkflowHint(`
+        <b>Lote RECIBIDO.</b>
+        Si está todo conforme, podés ejecutar <b>Cerrar lote</b>.
+      `);
+      return;
+    }
+
+    if (estado === "CERRADO") {
+      setWorkflowHint(`<b>Lote CERRADO.</b> Operación finalizada.`);
+      return;
+    }
+
+    if (estado === "ANULADO") {
+      setWorkflowHint(`<b>Lote ANULADO.</b> No admite nuevas acciones operativas.`);
+      return;
+    }
+
+    setWorkflowHint(`Estado actual: <b>${esc(estado || "-")}</b>.`);
   }
 
   function resetGuiaEncontrada() {
@@ -112,6 +199,9 @@
       if ($("f_tipo")?.value) qs.set("tipo_lote", $("f_tipo").value);
       if ($("f_estado")?.value) qs.set("estado", $("f_estado").value);
 
+      qs.set("limit", String(lotesLimit));
+      qs.set("offset", String(lotesPage * lotesLimit));
+
       const data = await api(`/interno/lotes?${qs.toString()}`, {
         headers: headers({ "Content-Type": "application/json" })
       });
@@ -123,6 +213,16 @@
       if (!rows.length) {
         tbody.innerHTML = `<tr><td colspan="10">Sin lotes para mostrar.</td></tr>`;
         setStatus("listStatus", "Sin resultados.");
+
+        const total = Number(data.total || 0);
+        const totalPages = Math.max(1, Math.ceil(total / lotesLimit));
+
+        if ($("lotesPagerInfo")) {
+          $("lotesPagerInfo").textContent = `Página ${Math.min(lotesPage + 1, totalPages)} de ${totalPages}`;
+        }
+        if ($("btnPrevLotes")) $("btnPrevLotes").disabled = lotesPage <= 0;
+        if ($("btnNextLotes")) $("btnNextLotes").disabled = true;
+
         return;
       }
 
@@ -157,12 +257,18 @@
         });
       });
 
-      setStatus("listStatus", `${rows.length} lote(s) cargados.`);
+      const total = Number(data.total || 0);
+      const totalPages = Math.max(1, Math.ceil(total / lotesLimit));
+      const pageActual = Math.min(lotesPage + 1, totalPages);
+
+      if ($("lotesPagerInfo")) $("lotesPagerInfo").textContent = `Página ${pageActual} de ${totalPages}`;
+      if ($("btnPrevLotes")) $("btnPrevLotes").disabled = lotesPage <= 0;
+      if ($("btnNextLotes")) $("btnNextLotes").disabled = (lotesPage + 1) >= totalPages;
+
+      setStatus("listStatus", `${rows.length} lote(s) cargados. Total: ${total}.`);
     } catch (err) {
       const tbody = $("tbodyLotes");
-      if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="10">${esc(err.message)}</td></tr>`;
-      }
+      if (tbody) tbody.innerHTML = `<tr><td colspan="10">${esc(err.message)}</td></tr>`;
       setStatus("listStatus", err.message, true);
     }
   }
@@ -230,6 +336,194 @@
     }
   }
 
+  async function cargarGuiasDisponibles() {
+    try {
+      const wrap = $("guiasDisponiblesWrap");
+      if (!wrap) return;
+
+      if (!currentLote?.id) {
+        setCount("countGuiasDisponibles", 0);
+        wrap.innerHTML = `<div class="empty">Seleccioná un lote para ver guías disponibles.</div>`;
+        return;
+      }
+
+      if (String(currentLote.estado || "").toUpperCase() !== "ABIERTO") {
+        guiasDisponibles = [];
+        setCount("countGuiasDisponibles", 0);
+        wrap.innerHTML = `<div class="empty">Las guías disponibles solo se muestran para lotes ABIERTOS.</div>`;
+        return;
+      }
+
+      const q = String($("f_disponibles_q")?.value || "").trim();
+      const qs = new URLSearchParams();
+      if (q) qs.set("q", q);
+
+      wrap.innerHTML = `<div class="empty">Cargando guías disponibles...</div>`;
+
+      const data = await api(`/interno/lotes/${currentLote.id}/guias-disponibles?${qs.toString()}`, {
+        headers: headers({ "Content-Type": "application/json" })
+      });
+
+      guiasDisponibles = Array.isArray(data.items) ? data.items : [];
+      renderGuiasDisponibles(guiasDisponibles);
+    } catch (err) {
+      const wrap = $("guiasDisponiblesWrap");
+      if (wrap) wrap.innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+    }
+  }
+
+  function renderGuiasDisponibles(items) {
+    const wrap = $("guiasDisponiblesWrap");
+    if (!wrap) return;
+
+    const total = Array.isArray(items) ? items.length : 0;
+    setCount("countGuiasDisponibles", total);
+
+    if (!Array.isArray(items) || !items.length) {
+      wrap.innerHTML = `<div class="empty">No hay guías disponibles para agregar.</div>`;
+      return;
+    }
+
+    wrap.innerHTML = items.map((g) => `
+      <div class="item">
+        <div style="display:flex; gap:10px; align-items:flex-start;">
+          <div style="padding-top:3px;">
+            <input type="checkbox" class="chk-guia-disponible" data-guia="${g.id}" />
+          </div>
+          <div style="flex:1;">
+            <div class="line1">${esc(g.numero_guia)} · ID ${esc(g.id)}</div>
+            <div class="line2">
+              ${esc(g.remitente_nombre || "-")} → ${esc(g.destinatario_nombre || "-")}
+            </div>
+            <div class="line2">
+              Origen: ${esc(g.sucursal_origen_nombre || g.sucursal_origen_id)} ·
+              Destino: ${esc(g.sucursal_destino_nombre || g.sucursal_destino_id)}
+            </div>
+            <div class="line2">
+              Estado: ${esc(g.estado_logistico || "-")} ·
+              Pago: ${esc(g.estado_pago || "-")} ·
+              Cobro: ${esc(g.tipo_cobro || "-")} ·
+              Bultos: ${esc(g.cant_bultos_calc || 0)}
+            </div>
+          </div>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  function renderGuiasAgregadas(guias, estadoLote) {
+    const box = $("guiasAgregadasWrap");
+    if (!box) return;
+
+    const total = Array.isArray(guias) ? guias.length : 0;
+    setCount("countGuiasAgregadas", total);
+
+    if (!Array.isArray(guias) || !guias.length) {
+      box.innerHTML = `<div class="empty">Todavía no hay guías agregadas al lote.</div>`;
+      return;
+    }
+
+    const canRemove = String(estadoLote || "").toUpperCase() === "ABIERTO";
+
+    box.innerHTML = guias.map((g) => `
+      <div class="item">
+        <div class="line1">${esc(g.numero_guia || g.guia_id)} · ${esc(g.estado_logistico || "-")}</div>
+        <div class="line2">
+          ${esc(g.remitente_nombre || "-")} → ${esc(g.destinatario_nombre || "-")}
+        </div>
+        <div class="line2">
+          Destino final: ${esc(g.guia_sucursal_destino_nombre || g.guia_sucursal_destino_id || "-")} ·
+          Bultos: ${esc(g.cant_bultos_declarada || 0)} ·
+          Recepción: ${esc(g.estado_recepcion || "PENDIENTE")}
+        </div>
+        <div class="line3">${esc(g.observacion_recepcion || "")}</div>
+        ${canRemove ? `
+          <div style="margin-top:8px;">
+            <button class="danger btn-remove-guia-agregada" data-guia="${g.guia_id}" style="width:auto;">
+              Quitar guía
+            </button>
+          </div>
+        ` : ""}
+      </div>
+    `).join("");
+
+    box.querySelectorAll(".btn-remove-guia-agregada").forEach((btn) => {
+      btn.addEventListener("click", () => quitarGuia(btn.getAttribute("data-guia")));
+    });
+  }
+
+  function renderConflictosBatch(conflictos) {
+    const box = $("guiasBatchConflictosWrap");
+    if (!box) return;
+
+    const total = Array.isArray(conflictos) ? conflictos.length : 0;
+    setCount("countGuiasConflictos", total);
+
+    if (!Array.isArray(conflictos) || !conflictos.length) {
+      box.innerHTML = `<div class="empty">Sin conflictos.</div>`;
+      return;
+    }
+
+    box.innerHTML = conflictos.map((c) => `
+      <div class="item">
+        <div class="line1">${esc(c.numero_guia || c.guia_id || "-")}</div>
+        <div class="line2">Motivo: ${esc(c.error || "Conflicto no especificado")}</div>
+        ${c.lote_activo ? `
+          <div class="line3">
+            Lote activo: ${esc(c.lote_activo.numero_lote || c.lote_activo.id || "-")}
+          </div>
+        ` : ""}
+      </div>
+    `).join("");
+  }
+
+  function getGuiasSeleccionadasDisponibles() {
+    return Array.from(document.querySelectorAll(".chk-guia-disponible:checked"))
+      .map((el) => Number(el.getAttribute("data-guia")))
+      .filter((n) => Number.isFinite(n) && n > 0);
+  }
+
+  function marcarTodasDisponibles(flag) {
+    document.querySelectorAll(".chk-guia-disponible").forEach((el) => {
+      el.checked = !!flag;
+    });
+  }
+
+  async function agregarGuiasSeleccionadas() {
+    try {
+      if (!currentLote?.id) throw new Error("Seleccioná un lote primero.");
+      if (String(currentLote.estado || "").toUpperCase() !== "ABIERTO") {
+        throw new Error("Solo se pueden agregar guías a un lote ABIERTO.");
+      }
+
+      const ids = getGuiasSeleccionadasDisponibles();
+      if (!ids.length) {
+        throw new Error("Seleccioná al menos una guía.");
+      }
+
+      renderConflictosBatch([]);
+      setStatus("detailStatus", `Agregando ${ids.length} guía(s)...`);
+
+      const data = await api(`/interno/lotes/${currentLote.id}/guias/batch`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ guia_ids: ids })
+      });
+
+      await cargarDetalle(currentLote.id);
+      await cargarLotes();
+      await cargarGuiasDisponibles();
+      renderConflictosBatch([]);
+      setStatus("detailStatus", data?.message || `${ids.length} guía(s) agregadas al lote.`);
+    } catch (err) {
+      const conflictos = err?.payload?.conflictos;
+      if (Array.isArray(conflictos) && conflictos.length) {
+        renderConflictosBatch(conflictos);
+      }
+      setStatus("detailStatus", err.message, true);
+    }
+  }
+
   function syncRecepcionObsInputs() {
     document.querySelectorAll(".rx-estado").forEach((sel) => {
       const guiaId = Number(sel.getAttribute("data-guia"));
@@ -261,12 +555,10 @@
           <div>
             <label>Estado recepción</label>
             <select class="rx-estado" data-guia="${g.guia_id}">
-              <option value="">Seleccionar...</option>
-              <option value="RECIBIDO_OK">RECIBIDO_OK</option>
+              <option value="RECIBIDO_OK" selected>RECIBIDO_OK</option>
               <option value="FALTANTE">FALTANTE</option>
-              <option value="DANADO">DANADO</option>
-              <option value="OBSERVADO">OBSERVADO</option>
-            </select>
+              <option value="DANADO">DANADO (continúa a central)</option>
+              <option value="OBSERVADO">OBSERVADO (continúa a central)</option>            </select>
           </div>
           <div>
             <label>Observación</label>
@@ -279,6 +571,10 @@
     box.insertAdjacentHTML("beforeend", `
       <div style="margin-top:14px;">
         <div class="mini-title">Controles de recepción</div>
+        <div class="muted" style="margin-bottom:8px;">
+        Por defecto las guías quedan en <b>RECIBIDO_OK</b>. 
+        Las novedades <b>DANADO</b> y <b>OBSERVADO</b> continúan el flujo en central y no traban la guía.   
+     </div>
         ${itemsHtml || `<div class="empty">No hay guías para recepcionar.</div>`}
       </div>
     `);
@@ -295,31 +591,27 @@
     if (!box) return;
 
     if (!Array.isArray(guias) || !guias.length) {
-      box.innerHTML = `<div class="empty">El lote no tiene guías cargadas.</div>`;
+      box.innerHTML = `<div class="empty">No hay detalle cargado.</div>`;
       return;
     }
 
-    const canRemove = String(estadoLote || "").toUpperCase() === "ABIERTO";
-
-    box.innerHTML = guias.map(g => `
+    box.innerHTML = guias.map((g) => `
       <div class="item">
         <div class="line1">${esc(g.numero_guia || g.guia_id)} · ${esc(g.estado_logistico || "-")}</div>
         <div class="line2">
           ${esc(g.remitente_nombre || "-")} → ${esc(g.destinatario_nombre || "-")}
         </div>
         <div class="line2">
-          Destino final: ${esc(g.guia_sucursal_destino_nombre || g.guia_sucursal_destino_id || "-")} ·
-          Bultos: ${esc(g.cant_bultos_declarada || 0)} ·
-          Recepción: ${esc(g.estado_recepcion || "PENDIENTE")}
+          Pago: ${esc(g.estado_pago || "-")} ·
+          Cobro: ${esc(g.tipo_cobro || "-")} ·
+          Bultos: ${esc(g.cant_bultos_declarada || 0)}
         </div>
-        <div class="line3">${esc(g.observacion_recepcion || "")}</div>
-        ${canRemove ? `<div style="margin-top:8px;"><button class="danger btn-remove-guia" data-guia="${g.guia_id}" style="width:auto;">Quitar guía</button></div>` : ""}
+        <div class="line2">
+          Recepción actual: ${esc(g.estado_recepcion || "PENDIENTE")}
+        </div>
+        ${g.observacion_recepcion ? `<div class="line3">${esc(g.observacion_recepcion)}</div>` : ""}
       </div>
     `).join("");
-
-    box.querySelectorAll(".btn-remove-guia").forEach(btn => {
-      btn.addEventListener("click", () => quitarGuia(btn.getAttribute("data-guia")));
-    });
 
     renderRecepcionControles(guias, estadoLote);
   }
@@ -337,9 +629,7 @@
     $("mBultos").textContent = lote.cant_bultos ?? "-";
 
     const mResultado = $("mResultadoRecepcion");
-    if (mResultado) {
-      mResultado.textContent = lote.resultado_recepcion || "-";
-    }
+    if (mResultado) mResultado.textContent = lote.resultado_recepcion || "-";
 
     const estado = String(lote.estado || "").toUpperCase();
 
@@ -355,6 +645,8 @@
       wrapAdd.style.opacity = estado === "ABIERTO" ? "1" : "0.55";
       wrapAdd.style.pointerEvents = estado === "ABIERTO" ? "auto" : "none";
     }
+
+    syncDetailMode(lote);
   }
 
   async function cargarDetalle(id) {
@@ -368,7 +660,19 @@
       loadMeta(currentLote);
       renderGuias(currentLote.guias || [], currentLote.estado);
       resetGuiaEncontrada();
-      setStatus("detailStatus", "Detalle cargado.");
+      renderConflictosBatch([]);
+      await cargarGuiasDisponibles();
+
+      const estado = String(currentLote?.estado || "").toUpperCase();
+      if (estado === "ABIERTO") {
+        setStatus("detailStatus", "Lote ABIERTO: podés agregar o quitar guías.");
+      } else if (estado === "DESPACHADO") {
+        setStatus("detailStatus", "Marcá novedades si existen. Por defecto todas las guías quedan en RECIBIDO_OK.");
+      } else if (estado === "RECIBIDO") {
+        setStatus("detailStatus", "Lote RECIBIDO: ya podés cerrarlo si corresponde.");
+      } else {
+        setStatus("detailStatus", "Detalle cargado.");
+      }
     } catch (err) {
       setStatus("detailStatus", err.message, true);
     }
@@ -486,7 +790,7 @@
 
     const estados = Array.from(document.querySelectorAll(".rx-estado"));
     if (!estados.length) {
-      throw new Error("No hay controles de recepción disponibles.");
+      throw new Error("No se cargaron los controles de recepción. Tocá 'Ver' sobre el lote y completá los estados abajo en 'Guías del lote'.");
     }
 
     const items = estados.map((sel) => {
@@ -530,6 +834,11 @@
         throw new Error("Solo se puede recepcionar un lote DESPACHADO.");
       }
 
+      const controles = Array.from(document.querySelectorAll(".rx-estado"));
+      if (!controles.length) {
+        throw new Error("No se cargaron los controles de recepción. Tocá 'Ver' sobre el lote y desplazate al bloque 'Guías del lote'.");
+      }
+
       const items = collectRecepcionItems();
 
       setStatus("detailStatus", "Registrando recepción...");
@@ -549,6 +858,7 @@
       setStatus("detailStatus", "Recepción registrada.");
     } catch (err) {
       setStatus("detailStatus", err.message, true);
+      focusFirstRecepcionControl();
     }
   }
 
@@ -637,6 +947,39 @@
   }
 
   function bind() {
+    $("btnPrevLotes")?.addEventListener("click", async () => {
+      if (lotesPage <= 0) return;
+      lotesPage -= 1;
+      await cargarLotes();
+    });
+
+    $("btnNextLotes")?.addEventListener("click", async () => {
+      lotesPage += 1;
+      await cargarLotes();
+    });
+
+    $("btnRefrescarDisponibles")?.addEventListener("click", () => {
+      cargarGuiasDisponibles();
+    });
+
+    $("btnMarcarTodasDisponibles")?.addEventListener("click", () => {
+      marcarTodasDisponibles(true);
+    });
+
+    $("btnDesmarcarTodasDisponibles")?.addEventListener("click", () => {
+      marcarTodasDisponibles(false);
+    });
+
+    $("btnAgregarSeleccionadas")?.addEventListener("click", () => {
+      agregarGuiasSeleccionadas();
+    });
+
+    $("f_disponibles_q")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        cargarGuiasDisponibles();
+      }
+    });
+
     $("btnCrearLote")?.addEventListener("click", crearLote);
     $("btnRefrescar")?.addEventListener("click", cargarLotes);
     $("btnBuscarGuia")?.addEventListener("click", buscarGuia);
@@ -646,16 +989,29 @@
     $("btnAnular")?.addEventListener("click", anular);
     $("btnRecepcionar")?.addEventListener("click", recepcionar);
     $("btnCerrarLote")?.addEventListener("click", cerrarLote);
+
     $("btnImprimir")?.addEventListener("click", () => {
       if (!currentLote?.id) return;
       window.open(`/hoja_ruta_lote.html?id=${encodeURIComponent(currentLote.id)}`, "_blank");
     });
 
     $("f_q")?.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") cargarLotes();
+      if (e.key === "Enter") {
+        lotesPage = 0;
+        cargarLotes();
+      }
     });
-    $("f_tipo")?.addEventListener("change", cargarLotes);
-    $("f_estado")?.addEventListener("change", cargarLotes);
+
+    $("f_tipo")?.addEventListener("change", () => {
+      lotesPage = 0;
+      cargarLotes();
+    });
+
+    $("f_estado")?.addEventListener("change", () => {
+      lotesPage = 0;
+      cargarLotes();
+    });
+
     $("tipo_lote")?.addEventListener("change", refreshTipoLoteLabels);
 
     $("numero_guia_add")?.addEventListener("keydown", (e) => {
@@ -667,6 +1023,7 @@
   bind();
   renderGuiaEncontrada(null);
   refreshTipoLoteLabels();
+  syncDetailMode(null);
   cargarSucursales();
   cargarLotes();
 })();

@@ -16,6 +16,8 @@ const {
   SET_MEDIO_PAGO,
 } = require("../utils/cobros.constants");
 
+const { generarMovimientosPorCobro } = require("../services/contabilidadAgencias");
+
 /* =========================================================
    Helpers
 ========================================================= */
@@ -340,6 +342,7 @@ router.post("/registrar", auth, async (req, res) => {
       },
     });
 
+    const contabilidad = await generarMovimientosPorCobro(client, cobro.id);
     const guiaActualizada = await getGuiaById(client, guiaId);
 
     await client.query("COMMIT");
@@ -348,6 +351,7 @@ router.post("/registrar", auth, async (req, res) => {
       ok: true,
       guia: guiaActualizada,
       cobro,
+      contabilidad,
     });
   } catch (err) {
     await client.query("ROLLBACK");
@@ -517,19 +521,19 @@ router.post("/rendir", auth, async (req, res) => {
       guia: guiaActualizada,
       cobro_id: cobro.id,
     });
-    } catch (err) {
-  await client.query("ROLLBACK");
-  console.error("POST /interno/cobros/rendir", err);
-  return res.status(500).json({
-    ok: false,
-    error: "Error interno al rendir cobro.",
-    debug: err?.message || String(err),
-    detail: err?.detail || null,
-    code: err?.code || null,
-  });
-} finally {
-  client.release();
-}
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("POST /interno/cobros/rendir", err);
+    return res.status(500).json({
+      ok: false,
+      error: "Error interno al rendir cobro.",
+      debug: err?.message || String(err),
+      detail: err?.detail || null,
+      code: err?.code || null,
+    });
+  } finally {
+    client.release();
+  }
 });
 
 /* =========================================================

@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EXR • Contabilidad Agencias</title>
+  <link rel="stylesheet" href="/css/exr_ui.css" />
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .ca-wrap {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 18px;
+    }
+
+    .ca-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .ca-topbar-left {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .ca-title {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 900;
+      color: var(--text);
+    }
+
+    .ca-sub {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .ca-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .ca-split {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    .ca-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .ca-card-hd {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.02);
+    }
+
+    .ca-card-bd {
+      padding: 14px 16px;
+    }
+
+    .ca-section-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 900;
+      color: var(--text);
+    }
+
+    .ca-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: end;
+    }
+
+    .ca-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .ca-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 140px;
+    }
+
+    .ca-field label {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+      letter-spacing: .02em;
+    }
+
+    .ca-field input,
+    .ca-field select,
+    .ca-field textarea {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255,255,255,.03);
+      color: var(--text);
+      font: inherit;
+      outline: none;
+      transition: border-color .12s ease, background .12s ease, box-shadow .12s ease;
+    }
+
+    .ca-field input,
+    .ca-field select {
+      height: 40px;
+      padding: 0 12px;
+    }
+
+    .ca-field textarea {
+      min-height: 88px;
+      padding: 10px 12px;
+      resize: vertical;
+    }
+
+    .ca-field input:focus,
+    .ca-field select:focus,
+    .ca-field textarea:focus {
+      border-color: rgba(124,58,237,.45);
+      box-shadow: 0 0 0 3px rgba(124,58,237,.12);
+      background: rgba(255,255,255,.05);
+    }
+
+    .ca-field input[readonly] {
+      opacity: .92;
+      background: rgba(255,255,255,.02);
+    }
+
+    .ca-grow {
+      flex: 1 1 220px;
+    }
+
+    .ca-grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .ca-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(120px,1fr));
+      gap: 10px;
+    }
+
+    .ca-kpi {
+      background: rgba(255,255,255,.03);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .ca-kpi .k,
+    .ca-kpi-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+      font-weight: 800;
+      letter-spacing: .04em;
+    }
+
+    .ca-kpi .v,
+    .ca-kpi-value {
+      font-size: 21px;
+      font-weight: 900;
+      color: var(--text);
+    }
+
+    .ca-statusbox,
+    .ca-status {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      padding: 10px 12px;
+      border: 1px dashed rgba(255,255,255,.16);
+      border-radius: 12px;
+      background: rgba(255,255,255,.02);
+    }
+
+    .ca-table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,.02);
+    }
+
+    .ca-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 820px;
+    }
+
+    .ca-table th,
+    .ca-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+      text-align: left;
+      vertical-align: middle;
+      font-size: 14px;
+      white-space: nowrap;
+      color: var(--text);
+    }
+
+    .ca-table th {
+      position: sticky;
+      top: 0;
+      background: rgba(255,255,255,.04);
+      z-index: 1;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--muted);
+      font-weight: 900;
+    }
+
+    .ca-table tr:hover td {
+      background: rgba(255,255,255,.03);
+    }
+
+    .ca-table tbody tr[data-sucursal-id],
+    .ca-table tbody tr[data-liq-id] {
+      cursor: pointer;
+    }
+
+    .ca-table tbody tr.ca-selected td {
+      background: rgba(124,58,237,.16) !important;
+    }
+
+    .ca-table tbody tr[data-sucursal-id]:hover td,
+    .ca-table tbody tr[data-liq-id]:hover td {
+      background: rgba(255,255,255,.05);
+    }
+
+    .ca-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.05);
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .ca-pill.ok {
+      background: rgba(16,185,129,.12);
+      color: #b6f3d8;
+      border-color: rgba(16,185,129,.35);
+    }
+
+    .ca-pill.warn {
+      background: rgba(245,158,11,.12);
+      color: #fde7b0;
+      border-color: rgba(245,158,11,.35);
+    }
+
+    .ca-pill.bad {
+      background: rgba(239,68,68,.12);
+      color: #ffc9c9;
+      border-color: rgba(239,68,68,.35);
+    }
+
+    .ca-muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .ca-empty {
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: var(--muted);
+      background: rgba(255,255,255,.01);
+    }
+
+    .ca-code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    dialog.ca-dialog {
+      width: min(1080px, calc(100vw - 40px));
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 0;
+      box-shadow: 0 20px 50px rgba(0,0,0,.35);
+      background: var(--panel);
+      color: var(--text);
+    }
+
+    dialog.ca-dialog::backdrop {
+      background: rgba(0,0,0,.55);
+    }
+
+    .ca-dialog-hd {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.02);
+    }
+
+    .ca-dialog-bd {
+      padding: 16px;
+      background: var(--panel);
+    }
+
+    .ca-dialog-ft {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 14px 16px;
+      border-top: 1px solid var(--line);
+      background: rgba(255,255,255,.02);
+    }
+
+    .w-120 { width: 120px; }
+    .w-160 { width: 160px; }
+    .w-220 { width: 220px; }
+
+    @media (max-width: 1180px) {
+      .ca-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 980px) {
+      .ca-grid-4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .ca-kpis {
+        grid-template-columns: repeat(2, minmax(120px,1fr));
+      }
+
+      .ca-title {
+        font-size: 22px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .ca-grid-4 {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="ca-wrap">
+    <div class="ca-topbar">
+      <div class="ca-topbar-left">
+        <h1 class="ca-title">Contabilidad Agencias</h1>
+        <div class="ca-sub" id="who">Cargando usuario…</div>
+      </div>
+
+      <div class="ca-actions">
+        <button class="btn" id="btnReload" type="button">Actualizar</button>
+        <button class="btn" id="btnVolverPanel" type="button">Volver al panel</button>
+        <button class="btn bad" id="btnSalir" type="button">Salir</button>
+      </div>
+    </div>
+
+    <div class="ca-grid">
+      <!-- COLUMNA IZQUIERDA -->
+      <div class="ca-split">
+        <section class="ca-card">
+          <div class="ca-card-hd">
+            <h2 class="ca-section-title">Resumen de agencias</h2>
+            <div class="ca-actions">
+              <button class="btn" id="btnResumenRefresh" type="button">Recargar</button>
+            </div>
+          </div>
+          <div class="ca-card-bd">
+            <div class="ca-statusbox" id="resumenEstadoBox">
+              <span class="ca-pill" id="resumenEstado">Listo</span>
+              <span class="ca-muted" id="resumenMeta">Sin filtros</span>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="ca-table-wrap">
+              <table class="ca-table" id="tblAgencias">
+                <thead>
+                  <tr>
+                    <th>Agencia</th>
+                    <th>Créditos abiertos</th>
+                    <th>Débitos abiertos</th>
+                    <th>Saldo abierto</th>
+                    <th>Saldo liquidable</th>
+                    <th>Pend.</th>
+                    <th>Bloq.</th>
+                    <th>En liq. (cant / saldo)</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbAgencias"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="ca-card">
+          <div class="ca-card-hd">
+            <div>
+              <h2 class="ca-section-title">Liquidaciones</h2>
+              <div class="ca-muted" id="liqListadoMeta">Sin datos</div>
+            </div>
+
+            <div class="ca-actions">
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px">
+                <input type="checkbox" id="chkLiquidacionesSoloNoVistas">
+                Solo no vistas
+              </label>
+              <button id="btnLiquidacionesRefresh" class="btn" type="button">Refrescar</button>
+            </div>
+          </div>
+          <div class="ca-card-bd">
+            <div class="ca-grid-4">
+              <div class="ca-kpi">
+                <div class="ca-kpi-label">Nuevas</div>
+                <div class="ca-kpi-value" id="liqNotifNuevas">0</div>
+              </div>
+
+              <div class="ca-kpi">
+                <div class="ca-kpi-label">Pend. cobro / pago</div>
+                <div class="ca-kpi-value" id="liqNotifPendPago">0</div>
+              </div>
+
+              <div class="ca-kpi">
+                <div class="ca-kpi-label">Pend. conciliación</div>
+                <div class="ca-kpi-value" id="liqNotifPendConc">0</div>
+              </div>
+
+              <div class="ca-kpi">
+                <div class="ca-kpi-label">Conciliadas</div>
+                <div class="ca-kpi-value" id="liqNotifConciliadas">0</div>
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="ca-status">
+              <strong id="liqListadoEstado">Sin liquidaciones</strong>
+              <span class="ca-muted" id="liqNotifUltima">Todavía no se cargó el resumen</span>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="ca-table-wrap">
+              <table class="ca-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Sucursal</th>
+                    <th>Período</th>
+                    <th>Saldo neto</th>
+                    <th>Estado</th>
+                    <th>Creada</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="tbLiquidacionesListado">
+                  <tr>
+                    <td colspan="7" class="ca-empty">Sin liquidaciones para mostrar</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="ca-card">
+          <div class="ca-card-hd">
+            <h2 class="ca-section-title">Cuenta corriente / movimientos</h2>
+            <div class="ca-actions">
+              <button class="btn" id="btnMovimientosRefresh" type="button">Recargar</button>
+            </div>
+          </div>
+          <div class="ca-card-bd">
+            <div class="ca-row">
+              <div class="ca-field w-160">
+                <label>Agencia seleccionada</label>
+                <input id="movSucursalNombre" type="text" readonly placeholder="Seleccionar agencia" />
+              </div>
+
+              <div class="ca-field w-160">
+                <label>Desde</label>
+                <input id="movFechaDesde" type="date" />
+              </div>
+
+              <div class="ca-field w-160">
+                <label>Hasta</label>
+                <input id="movFechaHasta" type="date" />
+              </div>
+
+              <div class="ca-field w-160">
+                <label>Estado</label>
+                <select id="movEstado">
+                  <option value="">Todos</option>
+                  <option value="PENDIENTE">PENDIENTE</option>
+                  <option value="BLOQUEADO_CIERRE">BLOQUEADO_CIERRE</option>
+                  <option value="INCLUIDO_LIQUIDACION">INCLUIDO_LIQUIDACION</option>
+                  <option value="CONCILIADO">CONCILIADO</option>
+                  <option value="ANULADO">ANULADO</option>
+                </select>
+              </div>
+
+              <div class="ca-field ca-grow">
+                <label>Búsqueda</label>
+                <input id="movQ" type="text" placeholder="Número guía / referencia / descripción" />
+              </div>
+
+              <div class="ca-actions">
+                <button class="btn" id="btnMovimientosBuscar" type="button">Buscar</button>
+                <button class="btn" id="btnMovimientosLimpiar" type="button">Limpiar</button>
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="ca-table-wrap">
+              <table class="ca-table" id="tblMovimientos">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Sentido</th>
+                    <th>Concepto</th>
+                    <th>Guía</th>
+                    <th>Importe</th>
+                    <th>Estado</th>
+                    <th>Descripción</th>
+                    <th>Ref</th>
+                  </tr>
+                </thead>
+                <tbody id="tbMovimientos"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- COLUMNA DERECHA -->
+      <div class="ca-split">
+        <section class="ca-card">
+          <div class="ca-card-hd">
+            <h2 class="ca-section-title">Liquidables de la agencia</h2>
+            <div class="ca-actions">
+              <button class="btn" id="btnLiquidablesRefresh" type="button">Recargar</button>
+            </div>
+          </div>
+          <div class="ca-card-bd">
+            <div class="ca-row">
+              <div class="ca-field w-160">
+                <label>Agencia</label>
+                <input id="liqSucursalNombre" type="text" readonly placeholder="Seleccionar agencia" />
+              </div>
+
+              <div class="ca-field w-160">
+                <label>Desde</label>
+                <input id="liqFechaDesde" type="date" />
+              </div>
+
+              <div class="ca-field w-160">
+                <label>Hasta</label>
+                <input id="liqFechaHasta" type="date" />
+              </div>
+
+              <div class="ca-actions">
+                <button class="btn" id="btnVerLiquidables" type="button">Ver liquidables</button>
+                <button class="btn ok" id="btnGenerarLiquidacion" type="button">Generar liquidación</button>
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="ca-kpis">
+              <div class="ca-kpi">
+                <div class="k">Créditos</div>
+                <div class="v" id="liqKCreditos">$ 0.00</div>
+              </div>
+              <div class="ca-kpi">
+                <div class="k">Débitos</div>
+                <div class="v" id="liqKDebitos">$ 0.00</div>
+              </div>
+              <div class="ca-kpi">
+                <div class="k">Saldo neto</div>
+                <div class="v" id="liqKSaldo">$ 0.00</div>
+              </div>
+              <div class="ca-kpi">
+                <div class="k">Movimientos</div>
+                <div class="v" id="liqKCantidad">0</div>
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="ca-table-wrap">
+              <table class="ca-table" id="tblLiquidables">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Sentido</th>
+                    <th>Concepto</th>
+                    <th>Guía</th>
+                    <th>Importe</th>
+                    <th>Descripción</th>
+                  </tr>
+                </thead>
+                <tbody id="tbLiquidables"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="ca-card">
+          <div class="ca-card-hd">
+            <h2 class="ca-section-title">Liquidación seleccionada</h2>
+            <div class="ca-actions">
+              <button class="btn" id="btnLiquidacionRefresh" type="button">Recargar</button>
+            </div>
+          </div>
+          <div class="ca-card-bd">
+            <div class="ca-statusbox">
+              <span class="ca-pill" id="liqSelEstado">Sin liquidación</span>
+              <span class="ca-muted" id="liqSelMeta">Seleccioná o generá una liquidación</span>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="ca-row">
+              <div class="ca-field w-120">
+                <label>ID</label>
+                <input id="selLiquidacionId" type="text" readonly />
+              </div>
+              <div class="ca-field w-220">
+                <label>Agencia</label>
+                <input id="selLiquidacionSucursal" type="text" readonly />
+              </div>
+              <div class="ca-field w-160">
+                <label>Período desde</label>
+                <input id="selLiquidacionDesde" type="text" readonly />
+              </div>
+              <div class="ca-field w-160">
+                <label>Período hasta</label>
+                <input id="selLiquidacionHasta" type="text" readonly />
+              </div>
+              <div class="ca-field w-160">
+                <label>Estado</label>
+                <input id="selLiquidacionEstado" type="text" readonly />
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="ca-kpis">
+              <div class="ca-kpi">
+                <div class="k">Créditos</div>
+                <div class="v" id="selKCreditos">$ 0.00</div>
+              </div>
+              <div class="ca-kpi">
+                <div class="k">Débitos</div>
+                <div class="v" id="selKDebitos">$ 0.00</div>
+              </div>
+              <div class="ca-kpi">
+                <div class="k">Saldo neto</div>
+                <div class="v" id="selKSaldo">$ 0.00</div>
+              </div>
+              <div class="ca-kpi">
+                <div class="k">Saldo pendiente</div>
+                <div class="v" id="selKSaldoPendiente">$ 0.00</div>
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="ca-actions">
+              <button class="btn" id="btnBuscarLiquidacion" type="button">Buscar por ID</button>
+              <button class="btn ok" id="btnAprobarLiquidacion" type="button">Aprobar</button>
+              <button class="btn" id="btnRegistrarPago" type="button">Registrar pago/cobro</button>
+              <button class="btn warn" id="btnConciliarLiquidacion" type="button">Conciliar</button>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="ca-table-wrap">
+              <table class="ca-table" id="tblLiquidacionItems">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Sentido</th>
+                    <th>Concepto</th>
+                    <th>Guía</th>
+                    <th>Importe</th>
+                    <th>Descripción</th>
+                  </tr>
+                </thead>
+                <tbody id="tbLiquidacionItems"></tbody>
+              </table>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="ca-table-wrap">
+              <table class="ca-table" id="tblLiquidacionPagos">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Medio</th>
+                    <th>Importe</th>
+                    <th>Referencia</th>
+                    <th>Estado</th>
+                    <th>Obs.</th>
+                  </tr>
+                </thead>
+                <tbody id="tbLiquidacionPagos"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- DIALOGO GENERAR LIQUIDACION -->
+  <dialog class="ca-dialog" id="dlgGenerarLiquidacion">
+    <div class="ca-dialog-hd">
+      <h3 class="ca-section-title">Generar liquidación</h3>
+      <button class="btn" type="button" id="btnCloseDlgGenerar">Cerrar</button>
+    </div>
+    <div class="ca-dialog-bd">
+      <div class="ca-row">
+        <div class="ca-field w-220">
+          <label>Agencia</label>
+          <input id="genSucursalNombre" type="text" readonly />
+        </div>
+        <div class="ca-field w-160">
+          <label>Desde</label>
+          <input id="genPeriodoDesde" type="date" />
+        </div>
+        <div class="ca-field w-160">
+          <label>Hasta</label>
+          <input id="genPeriodoHasta" type="date" />
+        </div>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <div class="ca-field">
+        <label>Observaciones</label>
+        <textarea id="genObservaciones" placeholder="Liquidación quincena 1 / cierre parcial / observaciones internas"></textarea>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <div class="ca-statusbox">
+        <span class="ca-pill" id="genEstado">Pendiente</span>
+        <span class="ca-muted" id="genEstadoMsg">Prepará el período y confirmá.</span>
+      </div>
+    </div>
+    <div class="ca-dialog-ft">
+      <button class="btn" type="button" id="btnCancelarGeneracion">Cancelar</button>
+      <button class="btn ok" type="button" id="btnConfirmarGeneracion">Confirmar generación</button>
+    </div>
+  </dialog>
+
+  <!-- DIALOGO REGISTRAR PAGO -->
+  <dialog class="ca-dialog" id="dlgRegistrarPago">
+    <div class="ca-dialog-hd">
+      <h3 class="ca-section-title">Registrar pago / cobro</h3>
+      <button class="btn" type="button" id="btnCloseDlgPago">Cerrar</button>
+    </div>
+    <div class="ca-dialog-bd">
+      <div class="ca-row">
+        <div class="ca-field w-120">
+          <label>Liquidación</label>
+          <input id="pagoLiquidacionId" type="text" readonly />
+        </div>
+        <div class="ca-field w-220">
+          <label>Agencia</label>
+          <input id="pagoSucursalNombre" type="text" readonly />
+        </div>
+        <div class="ca-field w-160">
+          <label>Tipo</label>
+          <select id="pagoTipo">
+            <option value="PAGO_A_AGENCIA">PAGO_A_AGENCIA</option>
+            <option value="COBRO_DE_AGENCIA">COBRO_DE_AGENCIA</option>
+            <option value="COMPENSACION">COMPENSACION</option>
+          </select>
+        </div>
+        <div class="ca-field w-160">
+          <label>Fecha</label>
+          <input id="pagoFecha" type="date" />
+        </div>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <div class="ca-row">
+        <div class="ca-field w-160">
+          <label>Medio de pago</label>
+          <select id="pagoMedio">
+            <option value="TRANSFERENCIA">TRANSFERENCIA</option>
+            <option value="EFECTIVO">EFECTIVO</option>
+            <option value="QR">QR</option>
+            <option value="POS">POS</option>
+            <option value="MANUAL">MANUAL</option>
+          </select>
+        </div>
+
+        <div class="ca-field w-160">
+          <label>Importe</label>
+          <input id="pagoImporte" type="number" step="0.01" min="0" placeholder="0.00" />
+        </div>
+
+        <div class="ca-field ca-grow">
+          <label>Referencia</label>
+          <input id="pagoReferencia" type="text" placeholder="TRX-123 / comprobante / transferencia" />
+        </div>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <div class="ca-field">
+        <label>Observaciones</label>
+        <textarea id="pagoObservaciones" placeholder="Pago parcial / total / compensación / detalle interno"></textarea>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <div class="ca-statusbox">
+        <span class="ca-pill" id="pagoEstado">Pendiente</span>
+        <span class="ca-muted" id="pagoEstadoMsg">Completá datos y confirmá.</span>
+      </div>
+    </div>
+    <div class="ca-dialog-ft">
+      <button class="btn" type="button" id="btnCancelarPago">Cancelar</button>
+      <button class="btn ok" type="button" id="btnConfirmarPago">Registrar</button>
+    </div>
+  </dialog>
+
+  <!-- DIALOGO BUSCAR LIQUIDACION -->
+  <dialog class="ca-dialog" id="dlgBuscarLiquidacion">
+    <div class="ca-dialog-hd">
+      <h3 class="ca-section-title">Abrir liquidación por ID</h3>
+      <button class="btn" type="button" id="btnCloseDlgBuscarLiq">Cerrar</button>
+    </div>
+    <div class="ca-dialog-bd">
+      <div class="ca-row">
+        <div class="ca-field w-160">
+          <label>ID de liquidación</label>
+          <input id="buscarLiquidacionId" type="number" min="1" step="1" placeholder="1" />
+        </div>
+      </div>
+    </div>
+    <div class="ca-dialog-ft">
+      <button class="btn" type="button" id="btnCancelarBuscarLiq">Cancelar</button>
+      <button class="btn ok" type="button" id="btnConfirmarBuscarLiq">Abrir</button>
+    </div>
+  </dialog>
+
+  <script src="/contabilidad_agencias.js?v=4"></script>
+</body>
+</html>

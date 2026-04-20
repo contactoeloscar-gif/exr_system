@@ -1,9 +1,9 @@
-// routes/cierres.js
 const express = require("express");
 const router = express.Router();
 
 const pool = require("../config/db");
 const { isOwnerOrAdmin } = require("../middleware/roles");
+const { bloquearMovimientosPorCierre } = require("../services/cierresContables");
 
 function isYMD(s) {
   return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -19,7 +19,7 @@ function norm(v) {
 
 function hasOperativeRole(req) {
   const rol = norm(req.user?.rol);
-  return ["OWNER", "ADMIN", "OPERADOR"].includes(rol);
+  return ["OWNER", "ADMIN", "OPERADOR", "ENCARGADO"].includes(rol);
 }
 
 function getUserSucursalId(req) {
@@ -101,6 +101,24 @@ async function getPreviewData(db, { fecha, scope_modo, sucursal_id }) {
 
   const guiasR = await db.query(
     `
+    WITH bultos AS (
+      SELECT guia_id, COALESCE(SUM(cantidad), 0)::int AS cant_bultos
+      FROM public.guia_items
+      GROUP BY guia_id
+    ),
+    movimientos AS (
+      SELECT
+        m.guia_id,
+        COUNT(*)::int AS cant_movimientos,
+        COALESCE(SUM(CASE WHEN m.sentido = 'CREDITO_AGENCIA' THEN m.importe ELSE 0 END), 0)::numeric(12,2) AS total_creditos,
+        COALESCE(SUM(CASE WHEN m.sentido = 'DEBITO_AGENCIA' THEN m.importe ELSE 0 END), 0)::numeric(12,2) AS total_debitos
+      FROM public.sucursal_ctacte_movimientos m
+      WHERE m.sucursal_id = $1
+        AND m.fecha_operativa = $2
+        AND m.estado = 'PENDIENTE'
+        AND m.guia_id IS NOT NULL
+      GROUP BY m.guia_id
+    )
     SELECT
       g.id,
       g.numero_guia,
@@ -111,36 +129,26 @@ async function getPreviewData(db, { fecha, scope_modo, sucursal_id }) {
       g.remitente_nombre,
       g.destinatario_nombre,
       g.destinatario_direccion,
-      COALESCE(SUM(gi.cantidad), 0)::int AS cant_bultos
-    FROM public.guias g
-    LEFT JOIN public.cierres_guias cg ON cg.guia_id = g.id
-    LEFT JOIN public.guia_items gi ON gi.guia_id = g.id
-    WHERE g.estado_logistico = 'RECIBIDO_ORIGEN'
-      AND g.sucursal_origen_id = $1
-      AND cg.guia_id IS NULL
-    GROUP BY
-      g.id,
-      g.numero_guia,
-      g.estado_logistico,
-      g.estado_pago,
-      g.sucursal_origen_id,
-      g.sucursal_destino_id,
-      g.remitente_nombre,
-      g.destinatario_nombre,
-      g.destinatario_direccion
+      COALESCE(b.cant_bultos, 0)::int AS cant_bultos,
+      mv.cant_movimientos,
+      mv.total_creditos,
+      mv.total_debitos
+    FROM movimientos mv
+    JOIN public.guias g ON g.id = mv.guia_id
+    LEFT JOIN bultos b ON b.guia_id = g.id
     ORDER BY g.id DESC
     `,
-    [sucursal_id]
+    [sucursal_id, fecha]
   );
 
   const rows = guiasR.rows || [];
 
-  const cantidad_pagadas = rows.filter(
-    (r) => norm(r.estado_pago) === "PAGADO"
+  const cantidad_pagadas = rows.filter((r) =>
+    ["cobrado_destino", "rendido"].includes(String(r.estado_pago || "").trim().toLowerCase())
   ).length;
 
-  const cantidad_ce_pendiente = rows.filter(
-    (r) => norm(r.estado_pago) === "CONTRA_ENTREGA"
+  const cantidad_ce_pendiente = rows.filter((r) =>
+    ["pendiente_destino"].includes(String(r.estado_pago || "").trim().toLowerCase())
   ).length;
 
   const total_entregadas = rows.length;
@@ -160,7 +168,7 @@ async function getPreviewData(db, { fecha, scope_modo, sucursal_id }) {
   };
 }
 
-async function ensureOpenOrCreateCierre(
+       async function ensureOpenOrCreateCierre(
   client,
   { fecha, scope_modo, sucursal_id, userId, usuario }
 ) {
@@ -194,10 +202,10 @@ async function ensureOpenOrCreateCierre(
     [fecha, scope_modo, sucursal_id, userId, usuario]
   );
 
-  const cierreId = up.rows[0]?.id;
+  const cierreId = Number(up.rows[0]?.id);
   const estadoActual = norm(up.rows[0]?.estado);
 
-  if (!cierreId) {
+  if (!Number.isFinite(cierreId) || cierreId <= 0) {
     throw new Error("No se pudo crear/obtener el cierre");
   }
 
@@ -235,24 +243,31 @@ async function validarGlobalPermitido(client, fecha) {
   };
 }
 
-async function insertarGuiasEnCierre(client, { cierreId, scope_modo, sucursal_id }) {
+             async function insertarGuiasEnCierre(client, { cierreId, scope_modo, sucursal_id, fecha }) {
   if (scope_modo === "GLOBAL") {
     return [];
+  }
+
+  const cierreIdNum = Number(cierreId);
+  if (!Number.isFinite(cierreIdNum) || cierreIdNum <= 0) {
+    throw new Error("cierreId inválido al insertar guías en cierre.");
   }
 
   const ins = await client.query(
     `
     INSERT INTO public.cierres_guias (cierre_id, guia_id)
-    SELECT $1, g.id
-    FROM public.guias g
-    LEFT JOIN public.cierres_guias cg ON cg.guia_id = g.id
-    WHERE g.estado_logistico = 'RECIBIDO_ORIGEN'
-      AND g.sucursal_origen_id = $2
+    SELECT DISTINCT $1::bigint, m.guia_id
+    FROM public.sucursal_ctacte_movimientos m
+    LEFT JOIN public.cierres_guias cg ON cg.guia_id = m.guia_id
+    WHERE m.sucursal_id = $2
+      AND m.fecha_operativa = $3
+      AND m.estado = 'PENDIENTE'
+      AND m.guia_id IS NOT NULL
       AND cg.guia_id IS NULL
     ON CONFLICT DO NOTHING
     RETURNING guia_id
     `,
-    [cierreId, sucursal_id]
+    [cierreIdNum, sucursal_id, fecha]
   );
 
   return ins.rows || [];
@@ -290,8 +305,18 @@ async function recalcularTotalesCierre(client, cierreId, scope_modo, fecha) {
       WHERE cg.cierre_id = $1
     )
     SELECT
-      SUM(CASE WHEN UPPER(COALESCE(estado_pago,'')) = 'PAGADO' THEN 1 ELSE 0 END)::int AS cantidad_pagadas,
-      SUM(CASE WHEN UPPER(COALESCE(estado_pago,'')) = 'CONTRA_ENTREGA' THEN 1 ELSE 0 END)::int AS cantidad_ce_pendiente,
+      SUM(
+        CASE
+          WHEN LOWER(COALESCE(estado_pago,'')) IN ('cobrado_destino', 'rendido')
+          THEN 1 ELSE 0
+        END
+      )::int AS cantidad_pagadas,
+      SUM(
+        CASE
+          WHEN LOWER(COALESCE(estado_pago,'')) = 'pendiente_destino'
+          THEN 1 ELSE 0
+        END
+      )::int AS cantidad_ce_pendiente,
       COUNT(*)::int AS total_entregadas
     FROM g
     `,
@@ -308,7 +333,7 @@ async function recalcularTotalesCierre(client, cierreId, scope_modo, fecha) {
 /**
  * GET /interno/cierres/estado?fecha=YYYY-MM-DD
  * OWNER/ADMIN: estado global del día
- * OPERADOR: estado de su sucursal en el día
+ * OPERADOR/ENCARGADO: estado de su sucursal en el día
  */
 router.get("/estado", async (req, res) => {
   if (!hasOperativeRole(req)) {
@@ -405,9 +430,6 @@ router.get("/estado", async (req, res) => {
 
 /**
  * GET /interno/cierres/preview?fecha=YYYY-MM-DD&scope_modo=SUCURSAL|GLOBAL&sucursal_id=#
- *
- * - OPERADOR: solo preview SUCURSAL de su propia sucursal
- * - OWNER/ADMIN: puede preview SUCURSAL de cualquier sucursal o GLOBAL
  */
 router.get("/preview", async (req, res) => {
   if (!hasOperativeRole(req)) {
@@ -490,8 +512,6 @@ router.get("/preview", async (req, res) => {
 /**
  * POST /interno/cierres/diario-sucursal/:sucursalId
  * Solo OWNER/ADMIN
- * QA / piloto / cierre forzado de una sucursal específica
- * body opcional: { fecha: "YYYY-MM-DD" }
  */
 router.post("/diario-sucursal/:sucursalId", async (req, res) => {
   const owner = !!isOwnerOrAdmin(req);
@@ -539,6 +559,7 @@ router.post("/diario-sucursal/:sucursalId", async (req, res) => {
       cierreId,
       scope_modo: "SUCURSAL",
       sucursal_id,
+      fecha,
     });
 
     const totales = await recalcularTotalesCierre(client, cierreId, "SUCURSAL", fecha);
@@ -561,6 +582,12 @@ router.post("/diario-sucursal/:sucursalId", async (req, res) => {
       ]
     );
 
+    const contabilidad = await bloquearMovimientosPorCierre(client, {
+      sucursalId: sucursal_id,
+      fecha,
+      cierreId,
+    });
+
     await client.query("COMMIT");
 
     return res.json({
@@ -569,6 +596,7 @@ router.post("/diario-sucursal/:sucursalId", async (req, res) => {
       fecha,
       scope_modo: "SUCURSAL",
       sucursal_id,
+      contabilidad,
       preview_totales: preview.totales,
       guias_incluidas: insertadas.length,
       totales,
@@ -585,20 +613,6 @@ router.post("/diario-sucursal/:sucursalId", async (req, res) => {
 
 /**
  * POST /interno/cierres/diario
- * body:
- * {
- *   fecha?: "YYYY-MM-DD",
- *   scope_modo?: "SUCURSAL"|"GLOBAL",
- *   sucursal_id?: number // solo OWNER/ADMIN si scope=SUCURSAL
- * }
- *
- * Reglas:
- * - SUCURSAL:
- *   - OPERADOR: solo su propia sucursal
- *   - OWNER/ADMIN: su sucursal o una sucursal indicada
- * - GLOBAL:
- *   - solo OWNER/ADMIN
- *   - requiere que todas las sucursales tengan cierre SUCURSAL del día
  */
 router.post("/diario", async (req, res) => {
   if (!hasOperativeRole(req)) {
@@ -654,6 +668,8 @@ router.post("/diario", async (req, res) => {
       }
     }
 
+    let contabilidad = null;
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -689,6 +705,7 @@ router.post("/diario", async (req, res) => {
         cierreId,
         scope_modo,
         sucursal_id,
+        fecha,
       });
 
       const totales = await recalcularTotalesCierre(client, cierreId, scope_modo, fecha);
@@ -711,6 +728,14 @@ router.post("/diario", async (req, res) => {
         ]
       );
 
+      if (scope_modo === "SUCURSAL") {
+        contabilidad = await bloquearMovimientosPorCierre(client, {
+          sucursalId: sucursal_id,
+          fecha,
+          cierreId,
+        });
+      }
+
       await client.query("COMMIT");
 
       return res.json({
@@ -719,6 +744,7 @@ router.post("/diario", async (req, res) => {
         fecha,
         scope_modo,
         sucursal_id,
+        contabilidad,
         preview_totales: preview.totales,
         guias_incluidas: insertadas.length,
         totales,
@@ -739,14 +765,6 @@ router.post("/diario", async (req, res) => {
 
 /**
  * GET /interno/cierres/listado
- * Query:
- * - desde=YYYY-MM-DD
- * - hasta=YYYY-MM-DD
- * - scope_modo=GLOBAL|SUCURSAL
- * - estado=ABIERTO|CERRADO
- * - sucursal_id=#
- * - limit=100
- * - offset=0
  */
 router.get("/listado", async (req, res) => {
   if (!hasOperativeRole(req)) {
@@ -857,7 +875,6 @@ router.get("/listado", async (req, res) => {
 
 /**
  * GET /interno/cierres/:id
- * Detalle completo de un cierre
  */
 router.get("/:id", async (req, res) => {
   if (!hasOperativeRole(req)) {
@@ -968,7 +985,6 @@ router.get("/:id", async (req, res) => {
 
 /**
  * GET /interno/cierres/:id/comprobante
- * Devuelve payload listo para la vista imprimible
  */
 router.get("/:id/comprobante", async (req, res) => {
   if (!hasOperativeRole(req)) {

@@ -1,16 +1,16 @@
-// server.js (EXR-P15) — CORREGIDO + PRO (listo para pegar)
+// server.js (EXR-P17.1) — CORREGIDO + PRO (listo para pegar)
 const path = require("path");
+const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 
 const pool = require("./config/db");
 const cobrosRoutes = require("./routes/cobros");
+const { attachEstadoDerivadoMany } = require("./services/guiaEstadoDerivado.service");
 
 const authMod = require("./middleware/auth");
 const auth = authMod.auth || authMod;
-
-const { isOwnerOrAdmin } = require("./middleware/roles");
 
 const rateLimit = require("express-rate-limit");
 const QRCode = require("qrcode");
@@ -20,6 +20,7 @@ const crypto = require("crypto");
    CACHE BANDEJA (RAM)
 ============================ */
 const bandejaCache = new Map();
+
 function cacheGet(key) {
   const hit = bandejaCache.get(key);
   if (!hit) return null;
@@ -29,9 +30,11 @@ function cacheGet(key) {
   }
   return hit.val;
 }
+
 function cacheSet(key, val, ttlMs) {
   bandejaCache.set(key, { val, exp: Date.now() + ttlMs });
 }
+
 function cacheClearBandeja() {
   bandejaCache.clear();
 }
@@ -45,14 +48,58 @@ const app = express();
 app.set("etag", false);
 
 const IS_PROD = process.env.NODE_ENV === "production";
+
 function log(...args) {
   if (!IS_PROD) console.log(...args);
 }
+
 function logErr(...args) {
   console.error(...args);
 }
 
 log("SERVER FILE:", __filename);
+
+const SERVER_BOOT_AT = new Date().toISOString();
+
+function loadRouteModule(routeFile) {
+  const resolved = require.resolve(routeFile);
+  delete require.cache[resolved];
+  return {
+    router: require(resolved),
+    resolved,
+    mtime: fs.statSync(resolved).mtime.toISOString(),
+  };
+}
+
+/* ============================
+   RUTAS PUBLICAS
+============================ */
+function mountPublic(basePath, routeFile) {
+  try {
+    const loaded = loadRouteModule(routeFile);
+    log(`MONTANDO ${basePath} (public) -> ${routeFile}`);
+    log(`ROUTE FILE: ${loaded.resolved}`);
+    log(`ROUTE MTIME: ${loaded.mtime}`);
+    app.use(basePath, loaded.router);
+  } catch (e) {
+    logErr(`ERROR cargando ${routeFile} para ${basePath}:`, e.message);
+  }
+}
+
+/* ============================
+   RUTAS INTERNAS (PROTEGIDAS)
+============================ */
+function mountProtected(basePath, routeFile) {
+  try {
+    const loaded = loadRouteModule(routeFile);
+    log(`MONTANDO ${basePath} (protected) -> ${routeFile}`);
+    log(`ROUTE FILE: ${loaded.resolved}`);
+    log(`ROUTE MTIME: ${loaded.mtime}`);
+    app.use(basePath, auth, loaded.router);
+  } catch (e) {
+    logErr(`ERROR cargando ${routeFile} para ${basePath}:`, e.message);
+  }
+}
 
 /* ============================
    CORS + MIDDLEWARES BASE
@@ -63,7 +110,11 @@ const corsOrigins = (process.env.CORS_ORIGINS || "")
   .filter(Boolean);
 
 // fallback dev
-const defaultOrigins = ["http://localhost:5500", "http://127.0.0.1:5500", "http://localhost:3000"];
+const defaultOrigins = [
+  "http://localhost:5500",
+  "http://127.0.0.1:5500",
+  "http://localhost:3000",
+];
 
 app.use(
   cors({
@@ -82,11 +133,24 @@ log("STATIC DIR:", staticDir);
 app.use(express.static(staticDir));
 
 // Forzar entrega de HTML (evita caer al 404 JSON si hay confusión/caché)
-app.get("/etiqueta_batch.html", (req, res) => res.sendFile(path.join(staticDir, "etiqueta_batch.html")));
-app.get("/etiqueta.html", (req, res) => res.sendFile(path.join(staticDir, "etiqueta.html")));
-app.get("/cierres.html", (req, res) => res.sendFile(path.join(staticDir, "cierres.html")));
-app.get("/cierre_comprobante.html", (req, res) => res.sendFile(path.join(staticDir, "cierre_comprobante.html")));
-app.get("/cierres_historial.html", (req, res) => res.sendFile(path.join(staticDir, "cierres_historial.html")));
+app.get("/etiqueta_batch.html", (_req, res) =>
+  res.sendFile(path.join(staticDir, "etiqueta_batch.html"))
+);
+app.get("/etiqueta.html", (_req, res) =>
+  res.sendFile(path.join(staticDir, "etiqueta.html"))
+);
+app.get("/cierres.html", (_req, res) =>
+  res.sendFile(path.join(staticDir, "cierres.html"))
+);
+app.get("/cierre_comprobante.html", (_req, res) =>
+  res.sendFile(path.join(staticDir, "cierre_comprobante.html"))
+);
+app.get("/cierres_historial.html", (_req, res) =>
+  res.sendFile(path.join(staticDir, "cierres_historial.html"))
+);
+app.get("/contabilidad_agencias.html", (_req, res) =>
+  res.sendFile(path.join(staticDir, "contabilidad_agencias.html"))
+);
 
 /* ============================
    INVALIDACIÓN CACHE BANDEJA
@@ -95,21 +159,19 @@ app.use((req, res, next) => {
   const m = req.method.toUpperCase();
   const p = req.path;
 
+  const mutatingMethod = ["POST", "PATCH", "PUT", "DELETE"].includes(m);
+
   const touchesBandeja =
-    (m === "POST" && (
+    mutatingMethod &&
+    (
       p === "/guias" ||
       p === "/guias/pago" ||
       p.startsWith("/guias/estado") ||
-      p.startsWith("/interno/cobros")
-    )) ||
-    (m === "PATCH" && (
-      p.startsWith("/guias/") ||
-      p.startsWith("/interno/cobros")
-    )) ||
-    (m === "DELETE" && (
-      p.startsWith("/guias/") ||
-      p.startsWith("/interno/cobros")
-    ));
+      p.startsWith("/interno/cobros") ||
+      p.startsWith("/interno/contabilidad") ||
+      p.startsWith("/interno/cierres") ||
+      p.startsWith("/interno/lotes")
+    );
 
   if (!touchesBandeja) return next();
 
@@ -127,15 +189,29 @@ app.use((req, res, next) => {
 ============================ */
 function makeEtagForBandeja(payload) {
   const base = JSON.stringify({
+    scope: payload.scope,
+    sucursal_id: payload.sucursal_id,
     total: payload.total,
+    export: payload.export,
     guias: (payload.guias || []).map((g) => [
       g.id,
       g.created_at,
+      g.updated_at ?? null,
       g.estado_logistico,
       g.estado_pago,
+      g.condicion_pago,
+      g.tipo_cobro,
       g.metodo_pago,
+      g.cobro_obligatorio_entrega,
       g.monto_cobrar_destino,
-      g.rendido_at,
+      g.cobrado_destino_at ?? null,
+      g.rendido_at ?? null,
+      g.cierre_id ?? null,
+      g.cierre_estado_db ?? null,
+      g.liquidacion_id ?? null,
+      g.liquidacion_estado_db ?? null,
+      g.conciliacion_id ?? null,
+      g.conciliacion_estado_db ?? null,
     ]),
   });
   return crypto.createHash("sha1").update(base).digest("hex");
@@ -150,11 +226,70 @@ function parseIfNoneMatch(headerVal) {
     .filter(Boolean);
 }
 
+function pushEstadoPagoWhere(where, params, estado_pago) {
+  const ep = String(estado_pago || "").trim().toLowerCase();
+  if (!ep) return;
+
+  if (ep === "pendiente") {
+    where.push(`LOWER(COALESCE(g.estado_pago,'')) IN ('pendiente_origen','pendiente_destino')`);
+    return;
+  }
+
+  if (ep === "pagado") {
+    where.push(`LOWER(COALESCE(g.estado_pago,'')) IN ('cobrado_destino','rendido','pagado','pagado_origen','no_aplica')`);
+    return;
+  }
+
+  if (ep === "pendiente_rendicion") {
+    where.push(`LOWER(COALESCE(g.estado_pago,'')) = 'cobrado_destino' AND g.rendido_at IS NULL`);
+    return;
+  }
+
+  if (ep === "rendido") {
+    where.push(`LOWER(COALESCE(g.estado_pago,'')) IN ('cobrado_destino','rendido') AND g.rendido_at IS NOT NULL`);
+    return;
+  }
+
+  if (ep === "observado") {
+    where.push(`LOWER(COALESCE(g.estado_pago,'')) = 'observado'`);
+    return;
+  }
+
+  params.push(ep);
+  where.push(`LOWER(COALESCE(g.estado_pago,'')) = $${params.length}`);
+}
+
+function decorateBandejaRows(items) {
+  return (items || []).map((g) => {
+    const estadoPago = String(g.estado_pago || "").trim().toLowerCase();
+    const tipoCobro = String(g.tipo_cobro || "").trim().toUpperCase();
+    const condicionPago = String(g.condicion_pago || "").trim().toUpperCase();
+
+    const esPagoDestino =
+      tipoCobro === "DESTINO" || condicionPago === "DESTINO";
+
+    const rendido = !!g.rendido_at || estadoPago === "rendido";
+    const pendienteRendicion =
+      esPagoDestino &&
+      estadoPago === "cobrado_destino" &&
+      !rendido;
+
+    return {
+      ...g,
+      rendicion_estado: rendido
+        ? "RENDIDO"
+        : (pendienteRendicion ? "PENDIENTE" : "NO_APLICA"),
+      rendicion_pendiente: pendienteRendicion,
+      rendido_bool: rendido,
+    };
+  });
+}
+
 /* ============================
    SQL comunes (reutilizables)
    - Incluye cant_bultos desde guia_items (SUM(cantidad))
    - Incluye destinatario_direccion
-   - P15: incluye condicion_pago y monto_cobrar_destino
+   - P15/P17.1: incluye campos mínimos para estado_derivado
 ============================ */
 const SQL_GUIAS_SELECT = `
   g.id, g.numero_guia, g.created_at,
@@ -173,6 +308,7 @@ const SQL_GUIAS_SELECT = `
   g.monto_total,
   g.monto_cobrar_destino,
   g.cobro_obligatorio_entrega,
+  g.cobrado_destino_at,
 
   g.rendido_at,
   g.rendido_by_user_id,
@@ -182,8 +318,25 @@ const SQL_GUIAS_SELECT = `
   g.destinatario_nombre, g.destinatario_telefono, g.destinatario_direccion,
 
   COALESCE(b.cant_bultos,0) AS cant_bultos,
-  g.fragil
+  g.fragil,
+
+  false AS observada,
+  false AS excepcion_entrega,
+
+  NULL::bigint AS cierre_id,
+  NULL::text AS cierre_estado_db,
+  NULL::date AS cierre_fecha,
+
+  NULL::bigint AS liquidacion_id,
+  NULL::text AS liquidacion_estado_db,
+
+  NULL::bigint AS conciliacion_id,
+  NULL::text AS conciliacion_estado_db,
+
+  NULL::text AS ultimo_evento,
+  NULL::timestamp AS ultimo_evento_at
 `;
+
 const SQL_GUIAS_JOINS = `
   LEFT JOIN sucursales so ON so.id = g.sucursal_origen_id
   LEFT JOIN sucursales sd ON sd.id = g.sucursal_destino_id
@@ -197,22 +350,15 @@ const SQL_GUIAS_JOINS = `
 /* ============================
    RUTAS PUBLICAS
 ============================ */
-function mountPublic(basePath, routeFile) {
-  try {
-    log(`MONTANDO ${basePath} (public) -> ${routeFile}`);
-    const router = require(routeFile);
-    app.use(basePath, router);
-  } catch (e) {
-    logErr(`ERROR cargando ${routeFile} para ${basePath}:`, e.message);
-  }
-}
-
 const loginLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { ok: false, error: "Demasiados intentos. Esperá unos minutos y probá de nuevo." },
+  message: {
+    ok: false,
+    error: "Demasiados intentos. Esperá unos minutos y probá de nuevo.",
+  },
 });
 
 // Aplica SOLO a login
@@ -229,16 +375,6 @@ app.get("/test-auth", auth, (req, res) => res.json({ ok: true, user: req.user })
 /* ============================
    RUTAS INTERNAS (PROTEGIDAS)
 ============================ */
-function mountProtected(basePath, routeFile) {
-  try {
-    log(`MONTANDO ${basePath} (protected) -> ${routeFile}`);
-    const router = require(routeFile);
-    app.use(basePath, auth, router);
-  } catch (e) {
-    logErr(`ERROR cargando ${routeFile} para ${basePath}:`, e.message);
-  }
-}
-
 // 1) lo más específico primero
 mountProtected("/guias/estado", "./routes/estadoGuia");
 
@@ -255,6 +391,7 @@ mountProtected("/recalculo", "./routes/recalculo");
 mountProtected("/interno/cierres", "./routes/cierres");
 mountProtected("/admin", "./routes/admin");
 mountProtected("/interno/lotes", "./routes/lotes");
+mountProtected("/interno/contabilidad", "./routes/contabilidadAgencias");
 
 // P15 - Cobros / pago en destino
 // Se deja sin auth acá porque routes/cobros.js ya protege cada endpoint.
@@ -266,9 +403,19 @@ app.use("/interno/cobros", cobrosRoutes);
    ENDPOINTS INTERNOS BASE
 ============================ */
 app.get("/interno/ping", auth, (req, res) => res.json({ ok: true, user: req.user }));
-app.get("/", (req, res) => res.send("Sistema EXR activo 🚛"));
 
-app.get("/health/db", async (req, res) => {
+app.get("/interno/runtime", auth, (req, res) => {
+  res.json({
+    ok: true,
+    boot_at: SERVER_BOOT_AT,
+    pid: process.pid,
+    node_env: process.env.NODE_ENV || "development",
+  });
+});
+
+app.get("/", (_req, res) => res.send("Sistema EXR activo 🚛"));
+
+app.get("/health/db", async (_req, res) => {
   try {
     const result = await pool.query("SELECT NOW() as now");
     res.json({ ok: true, now: result.rows[0].now });
@@ -277,11 +424,11 @@ app.get("/health/db", async (req, res) => {
   }
 });
 
-app.get("/lotes.html", auth, (req, res) => {
+app.get("/lotes.html", auth, (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "lotes.html"));
 });
 
-app.get("/hoja_ruta_lote.html", auth, (req, res) => {
+app.get("/hoja_ruta_lote.html", auth, (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "hoja_ruta_lote.html"));
 });
 
@@ -314,30 +461,29 @@ app.get("/interno/bandeja", auth, async (req, res) => {
     const q = (req.query.q || "").trim();
     const estado_logistico = (req.query.estado_logistico || "").trim();
     const estado_pago = (req.query.estado_pago || "").trim().toLowerCase();
-    const tipo_cobro = (req.query.tipo_cobro || "").trim().toLowerCase();
+    const tipo_cobro = (req.query.tipo_cobro || "").trim().toUpperCase();
     const sin_metodo = String(req.query.sin_metodo || "") === "1";
     const rendicion = (req.query.rendicion || "").trim().toLowerCase();
 
     const limit = exportAll ? 50000 : Math.min(parseInt(req.query.limit || "25", 10) || 25, 500);
     const offset = exportAll ? 0 : Math.max(parseInt(req.query.offset || "0", 10) || 0, 0);
 
-    // Cache solo JSON
     const cacheable = !wantsCSV;
     const cacheKey = cacheable
-  ? JSON.stringify({
-      user: req.user?.user_id,
-      rol,
-      suc: sucursalId,
-      q,
-      estado_logistico,
-      estado_pago,
-      tipo_cobro,
-      sin_metodo,
-      rendicion,
-      limit,
-      offset,
-    })
-  : null;
+      ? JSON.stringify({
+          user: req.user?.user_id,
+          rol,
+          suc: sucursalId,
+          q,
+          estado_logistico,
+          estado_pago,
+          tipo_cobro,
+          sin_metodo,
+          rendicion,
+          limit,
+          offset,
+        })
+      : null;
 
     if (cacheable) {
       const cached = cacheGet(cacheKey);
@@ -370,14 +516,11 @@ app.get("/interno/bandeja", auth, async (req, res) => {
         where.push(`g.estado_logistico = $${params.length}`);
       }
 
-      if (estado_pago) {
-        params.push(estado_pago);
-        where.push(`g.estado_pago = $${params.length}`);
-      }
+      pushEstadoPagoWhere(where, params, estado_pago);
 
       if (tipo_cobro) {
         params.push(tipo_cobro);
-        where.push(`g.tipo_cobro = $${params.length}`);
+        where.push(`UPPER(COALESCE(g.tipo_cobro,'')) = $${params.length}`);
       }
 
       if (sin_metodo) {
@@ -385,13 +528,12 @@ app.get("/interno/bandeja", auth, async (req, res) => {
       }
 
       if (rendicion === "pendiente") {
-    where.push(`g.estado_pago = 'cobrado_destino' AND g.rendido_at IS NULL`);
-    
-}
+        where.push(`g.estado_pago = 'cobrado_destino' AND g.rendido_at IS NULL`);
+      }
 
-if (rendicion === "rendido") {
-     where.push(`g.estado_pago = 'cobrado_destino' AND g.rendido_at IS NOT NULL`);
-}
+      if (rendicion === "rendido") {
+        where.push(`g.estado_pago = 'cobrado_destino' AND g.rendido_at IS NOT NULL`);
+      }
 
       if (q) {
         params.push(`%${q}%`);
@@ -431,7 +573,7 @@ if (rendicion === "rendido") {
         LIMIT ${pLimit} OFFSET ${pOffset}
       `;
       const r = await pool.query(dataQ, p);
-      rows = r.rows || [];
+      rows = decorateBandejaRows(r.rows || []);
     } else {
       if (!sucursalId) {
         return res.status(403).json({ ok: false, error: "Usuario sin sucursal asignada" });
@@ -445,14 +587,11 @@ if (rendicion === "rendido") {
         where.push(`g.estado_logistico = $${params.length}`);
       }
 
-      if (estado_pago) {
-        params.push(estado_pago);
-        where.push(`g.estado_pago = $${params.length}`);
-      }
+      pushEstadoPagoWhere(where, params, estado_pago);
 
       if (tipo_cobro) {
         params.push(tipo_cobro);
-        where.push(`g.tipo_cobro = $${params.length}`);
+        where.push(`UPPER(COALESCE(g.tipo_cobro,'')) = $${params.length}`);
       }
 
       if (sin_metodo) {
@@ -460,10 +599,12 @@ if (rendicion === "rendido") {
       }
 
       if (rendicion === "pendiente") {
-         where.push(`g.estado_pago = 'cobrado_destino' AND g.rendido_at IS NULL`);}
+        where.push(`g.estado_pago = 'cobrado_destino' AND g.rendido_at IS NULL`);
+      }
 
       if (rendicion === "rendido") {
-         where.push(`g.estado_pago = 'cobrado_destino' AND g.rendido_at IS NOT NULL`);}
+        where.push(`g.estado_pago = 'cobrado_destino' AND g.rendido_at IS NOT NULL`);
+      }
 
       if (q) {
         params.push(`%${q}%`);
@@ -503,8 +644,10 @@ if (rendicion === "rendido") {
         LIMIT ${pLimit} OFFSET ${pOffset}
       `;
       const r = await pool.query(dataQ, p);
-      rows = r.rows || [];
+      rows = decorateBandejaRows(r.rows || []);
     }
+
+    rows = attachEstadoDerivadoMany(rows);
 
     if (wantsCSV) {
       const sep = ";";
@@ -590,6 +733,7 @@ app.get("/interno/etiqueta/:guiaId", auth, async (req, res) => {
     if (!guiaId || Number.isNaN(guiaId)) {
       return res.status(400).json({ ok: false, error: "guiaId inválido" });
     }
+
     if (b !== null && (Number.isNaN(b) || b < 1)) {
       return res.status(400).json({ ok: false, error: "b inválido (>=1)" });
     }
@@ -616,10 +760,17 @@ app.get("/interno/etiqueta/:guiaId", auth, async (req, res) => {
 
     if (!owner) {
       const s = Number(req.user?.sucursal_id);
-      if (!s) return res.status(403).json({ ok: false, error: "Usuario sin sucursal asignada" });
+      if (!s) {
+        return res.status(403).json({ ok: false, error: "Usuario sin sucursal asignada" });
+      }
 
-      const ok = Number(guia.sucursal_origen_id) === s || Number(guia.sucursal_destino_id) === s;
-      if (!ok) return res.status(403).json({ ok: false, error: "Sin permisos para esta guía" });
+      const ok =
+        Number(guia.sucursal_origen_id) === s ||
+        Number(guia.sucursal_destino_id) === s;
+
+      if (!ok) {
+        return res.status(403).json({ ok: false, error: "Sin permisos para esta guía" });
+      }
     }
 
     const total = Math.max(1, Number(guia.cant_bultos || 0));
@@ -631,8 +782,13 @@ app.get("/interno/etiqueta/:guiaId", auth, async (req, res) => {
     const qrText = b ? `${guia.numero_guia}#B${b}/${total}` : guia.numero_guia;
     const qrDataUrl = await QRCode.toDataURL(qrText, { margin: 1, scale: 6 });
 
-    const origenLabel = `${guia.sucursal_origen_codigo ? guia.sucursal_origen_codigo + " — " : ""}${guia.sucursal_origen_nombre || ("Sucursal " + guia.sucursal_origen_id)}`;
-    const destinoLabel = `${guia.sucursal_destino_codigo ? guia.sucursal_destino_codigo + " — " : ""}${guia.sucursal_destino_nombre || ("Sucursal " + guia.sucursal_destino_id)}`;
+    const origenLabel =
+      `${guia.sucursal_origen_codigo ? guia.sucursal_origen_codigo + " — " : ""}` +
+      `${guia.sucursal_origen_nombre || ("Sucursal " + guia.sucursal_origen_id)}`;
+
+    const destinoLabel =
+      `${guia.sucursal_destino_codigo ? guia.sucursal_destino_codigo + " — " : ""}` +
+      `${guia.sucursal_destino_nombre || ("Sucursal " + guia.sucursal_destino_id)}`;
 
     return res.json({
       ok: true,

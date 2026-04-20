@@ -58,6 +58,7 @@ const EXTRA_DOMICILIO = 6000;
 const SEGURO_PCT = 0.01;
 const VAL_DECL_MIN = 20000;
 const VAL_DECL_MAX = 80000;
+const MAX_KG_AGENCIA = 200;
 
 function calcVolKg(largo_cm, ancho_cm, alto_cm) {
   if (largo_cm > 0 && ancho_cm > 0 && alto_cm > 0) {
@@ -213,12 +214,32 @@ async function cotizar(client, params) {
   const vol_total = vol_items > 0 ? vol_items : vol_global;
   const m3_total = m3_items > 0 ? m3_items : m3_global;
 
-  const kg_cobrable = round2(Math.max(peso_total, vol_total));
-  const kg_tarifado = ceilMin1(kg_cobrable);
+const kg_cobrable = round2(Math.max(peso_total, vol_total));
+const kg_tarifado = ceilMin1(kg_cobrable);
 
-  const t = await tarifaPorKgRuta(client, origen_id, destino_id, kg_tarifado);
-  if (!t) return { ok: false, error: "No hay tarifa para esa ruta/peso", kg_tarifado, kg_cobrable };
+if (kg_cobrable > MAX_KG_AGENCIA) {
+  return {
+    ok: false,
+    status: 409,
+    code: "MAX_KG_AGENCIA",
+    error: `La carga supera el máximo operativo de agencia (${MAX_KG_AGENCIA} kg). Requiere cotización especial.`,
+    kg_cobrable,
+    kg_tarifado,
+    max_kg_agencia: MAX_KG_AGENCIA
+  };
+}
 
+const t = await tarifaPorKgRuta(client, origen_id, destino_id, kg_tarifado);
+if (!t) {
+  return {
+    ok: false,
+    status: 400,
+    code: "SIN_TARIFA",
+    error: "No hay tarifa para esa ruta/peso",
+    kg_tarifado,
+    kg_cobrable
+  };
+}
   const bultos_total = sumBultos(norm);
   const minimo_bultos = round2(bultos_total * MIN_BULTO);
 
@@ -300,8 +321,8 @@ router.post("/cotizar", async (req, res) => {
       valor_declarado,
       items: safeItems,
     });
-    if (!out.ok) return res.status(400).json(out);
-    return res.json(out);
+if (!out.ok) return res.status(out.status || 400).json(out);   
+ return res.json(out);
   } catch (e) {
     console.error("POST /guias/cotizar ERROR:", e);
     return res.status(500).json({ ok: false, error: String(e?.message || "Error interno cotizando") });
@@ -389,11 +410,10 @@ router.post("/", async (req, res) => {
       items: safeItems,
     });
 
-    if (!q.ok) {
-      await client.query("ROLLBACK");
-      return res.status(400).json(q);
-    }
-
+if (!q.ok) {
+  await client.query("ROLLBACK");
+  return res.status(q.status || 400).json(q);
+}
     const d = q.desglose;
 
     // Estados financieros P15

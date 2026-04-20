@@ -66,21 +66,43 @@ function normalizeTipoLote(v) {
 }
 
 function expectedEstadoGuiaParaAgregar(tipoLote) {
-  return tipoLote === "DISTRIBUCION" ? "RECIBIDO_CENTRAL" : "RECIBIDO_ORIGEN";
+  const t = String(tipoLote || "").trim().toUpperCase();
+
+  if (t === "COLECTA") return "RECIBIDO_ORIGEN";
+  if (t === "DISTRIBUCION") return "RECIBIDO_CENTRAL";
+
+  return null;
 }
 
 function expectedEstadoGuiaDespacho(tipoLote) {
-  return tipoLote === "DISTRIBUCION" ? "EN_TRANSITO_A_DESTINO" : "EN_TRANSITO_A_CENTRAL";
-}
-
-function expectedEstadoGuiaRecepcionOK(tipoLote) {
-  return tipoLote === "DISTRIBUCION" ? "RECIBIDO_DESTINO" : "RECIBIDO_CENTRAL";
+  return String(tipoLote || "").trim().toUpperCase() === "DISTRIBUCION"
+    ? "EN_TRANSITO_A_DESTINO"
+    : "EN_TRANSITO_A_CENTRAL";
 }
 
 function expectedEstadoGuiaRecepcionObservada(tipoLote) {
-  return tipoLote === "DISTRIBUCION"
+  return String(tipoLote || "").trim().toUpperCase() === "DISTRIBUCION"
+    ? "RECIBIDO_DESTINO_OBSERVADO"
+    : "RECIBIDO_CENTRAL";
+}
+function expectedEstadoGuiaRecepcionObservada(tipoLote) {
+  return String(tipoLote || "").trim().toUpperCase() === "DISTRIBUCION"
     ? "RECIBIDO_DESTINO_OBSERVADO"
     : "RECIBIDO_CENTRAL_OBSERVADO";
+}
+
+function isEstadoLoteRecibido(estado) {
+  return String(estado || "").trim().toUpperCase() === "RECIBIDO";
+}
+
+function calcularResultadoRecepcion(total, okCount, novedadCount) {
+  const totalN = Number(total || 0);
+  const okN = Number(okCount || 0);
+  const novedadN = Number(novedadCount || 0);
+
+  if (totalN > 0 && okN === totalN) return "TOTAL";
+  if (okN > 0 && novedadN > 0) return "PARCIAL";
+  return "CON_NOVEDAD";
 }
 
 async function insertarEventoLote(client, {
@@ -490,6 +512,9 @@ router.get("/", async (req, res) => {
     const sucursal_id = asInt(req.query?.sucursal_id);
     const q = cleanText(req.query?.q, 120);
 
+    const limit = Math.min(Math.max(asInt(req.query?.limit) || 5, 1), 50);
+    const offset = Math.max(asInt(req.query?.offset) || 0, 0);
+
     const params = [];
     const where = [];
 
@@ -523,12 +548,22 @@ router.get("/", async (req, res) => {
       )`);
     }
 
+    const sqlCount = `
+      SELECT COUNT(*)::int AS total
+      FROM lotes_colecta lc
+      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+    `;
+
+    const countResult = await pool.query(sqlCount, params);
+    const total = Number(countResult.rows[0]?.total || 0);
+
     const sql = `
       SELECT
         lc.id,
         lc.numero_lote,
         lc.tipo_lote,
         lc.estado,
+        lc.resultado_recepcion,
         lc.fecha_operativa,
         lc.sucursal_origen_id,
         so.nombre AS sucursal_origen_nombre,
@@ -539,20 +574,27 @@ router.get("/", async (req, res) => {
         lc.patente,
         lc.cant_guias,
         lc.cant_bultos,
-        lc.creado_en
+        lc.creado_en,
+        lc.consolidado_en,
+        lc.despachado_en,
+        lc.recibido_en,
+        lc.cerrado_en
       FROM lotes_colecta lc
       JOIN sucursales so ON so.id = lc.sucursal_origen_id
       JOIN sucursales sd ON sd.id = lc.sucursal_destino_id
       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
       ORDER BY lc.id DESC
-      LIMIT 200
+      LIMIT $${params.length + 1}
+      OFFSET $${params.length + 2}
     `;
 
-    const r = await pool.query(sql, params);
+    const r = await pool.query(sql, [...params, limit, offset]);
 
     return res.json({
       ok: true,
-      total: r.rows.length,
+      total,
+      limit,
+      offset,
       items: r.rows
     });
   } catch (err) {
@@ -633,7 +675,7 @@ router.get("/:id", async (req, res) => {
           0 AS kg_cobrable,
           g.sucursal_destino_id AS guia_sucursal_destino_id,
           sdg.nombre AS guia_sucursal_destino_nombre
-          FROM lote_guias lg
+        FROM lote_guias lg
         JOIN guias g ON g.id = lg.guia_id
         LEFT JOIN sucursales sdg ON sdg.id = g.sucursal_destino_id
         WHERE lg.lote_id = $1
@@ -674,6 +716,421 @@ router.get("/:id", async (req, res) => {
       error: "Error interno al obtener lote.",
       detail: err.message
     });
+  }
+});
+
+/* =========================
+   GET /interno/lotes/:id/guias-disponibles
+========================= */
+router.get("/:id/guias-disponibles", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const loteId = asInt(req.params.id);
+    const q = cleanText(req.query?.q, 120);
+    const u = getUser(req);
+
+    if (!mustBeAuthenticatedUser(u)) {
+      return res.status(401).json({ ok: false, error: "No autenticado." });
+    }
+
+    if (!Number.isFinite(loteId) || loteId <= 0) {
+      return res.status(400).json({ ok: false, error: "ID de lote inválido." });
+    }
+
+    const lote = await obtenerLoteCabecera(client, loteId);
+    if (!lote) {
+      return res.status(404).json({ ok: false, error: "Lote no encontrado." });
+    }
+
+    if (String(lote.estado || "").toUpperCase() !== "ABIERTO") {
+      return res.status(409).json({
+        ok: false,
+        error: "Solo se pueden listar guías disponibles para un lote ABIERTO."
+      });
+    }
+
+    if (!canUseSucursal(u, lote.sucursal_origen_id)) {
+      return res.status(403).json({
+        ok: false,
+        error: "No tenés permiso para operar este lote."
+      });
+    }
+
+    const tipoLote = String(lote.tipo_lote || "").trim().toUpperCase();
+    const estadoEsperado = expectedEstadoGuiaParaAgregar(tipoLote);
+
+    if (!estadoEsperado) {
+      return res.status(400).json({
+        ok: false,
+        error: `Tipo de lote inválido o no soportado para agregar guías: ${lote.tipo_lote}`
+      });
+    }
+
+    const params = [estadoEsperado];
+    let whereExtra = "";
+    let notExistsSql = "";
+    let hubNovedadSql = "";
+
+    if (tipoLote === "COLECTA") {
+      params.push(lote.sucursal_origen_id);
+      whereExtra += ` AND g.sucursal_origen_id = $${params.length} `;
+
+      notExistsSql = `
+        AND NOT EXISTS (
+          SELECT 1
+          FROM lote_guias lg
+          JOIN lotes_colecta lc ON lc.id = lg.lote_id
+          WHERE lg.guia_id = g.id
+            AND lc.estado IN ('ABIERTO', 'CONSOLIDADO', 'DESPACHADO')
+        )
+      `;
+    } else if (tipoLote === "DISTRIBUCION") {
+      params.push(lote.sucursal_destino_id);
+      whereExtra += ` AND g.sucursal_destino_id = $${params.length} `;
+
+            hubNovedadSql = `
+        AND COALESCE(g.novedad_hub_resolucion, 'CONTINUAR_ENVIO') <> 'RETENER_EN_HUB'
+      `;
+
+      notExistsSql = `
+        AND NOT EXISTS (
+          SELECT 1
+          FROM lote_guias lg
+          JOIN lotes_colecta lc ON lc.id = lg.lote_id
+          WHERE lg.guia_id = g.id
+            AND lc.tipo_lote = 'DISTRIBUCION'
+            AND lc.estado IN ('ABIERTO', 'CONSOLIDADO', 'DESPACHADO')
+            AND lc.id <> ${Number(lote.id)}
+        )
+      `;
+    } else {
+      params.push(lote.sucursal_destino_id);
+      whereExtra += ` AND g.sucursal_destino_id = $${params.length} `;
+
+      notExistsSql = `
+        AND NOT EXISTS (
+          SELECT 1
+          FROM lote_guias lg
+          JOIN lotes_colecta lc ON lc.id = lg.lote_id
+          WHERE lg.guia_id = g.id
+            AND lc.estado IN ('ABIERTO', 'CONSOLIDADO', 'DESPACHADO')
+        )
+      `;
+    }
+
+    if (q) {
+      params.push(`%${q}%`);
+      whereExtra += `
+        AND (
+          g.numero_guia ILIKE $${params.length}
+          OR COALESCE(g.remitente_nombre, '') ILIKE $${params.length}
+          OR COALESCE(g.destinatario_nombre, '') ILIKE $${params.length}
+        )
+      `;
+    }
+
+    const sql = `
+      SELECT
+        g.id,
+        g.numero_guia,
+        g.sucursal_origen_id,
+        so.nombre AS sucursal_origen_nombre,
+        g.sucursal_destino_id,
+        sd.nombre AS sucursal_destino_nombre,
+        g.estado_logistico,
+        g.estado_pago,
+        g.condicion_pago,
+        g.tipo_cobro,
+        g.remitente_nombre,
+        g.destinatario_nombre,
+        COALESCE((
+          SELECT SUM(COALESCE(gi.cantidad, 0))::int
+          FROM guia_items gi
+          WHERE gi.guia_id = g.id
+        ), 0) AS cant_bultos_calc
+      FROM guias g
+      JOIN sucursales so ON so.id = g.sucursal_origen_id
+      JOIN sucursales sd ON sd.id = g.sucursal_destino_id
+      WHERE g.estado_logistico = $1
+        ${hubNovedadSql}
+        ${notExistsSql}
+        ${whereExtra}  
+      ORDER BY g.id DESC
+      LIMIT 300
+    `;
+
+    const r = await client.query(sql, params);
+
+    const items = (r.rows || []).filter((guia) => {
+      const tipoCobro = String(guia.tipo_cobro || "").trim().toUpperCase();
+      const estadoPago = String(guia.estado_pago || "").trim().toLowerCase();
+
+      if (tipoCobro === "ORIGEN" && estadoPago === "pendiente_origen") {
+        return false;
+      }
+
+      return true;
+    });
+
+    return res.json({
+      ok: true,
+      lote: {
+        id: lote.id,
+        numero_lote: lote.numero_lote,
+        tipo_lote: lote.tipo_lote,
+        estado: lote.estado
+      },
+      total: items.length,
+      items
+    });
+  } catch (err) {
+    console.error("GET /interno/lotes/:id/guias-disponibles error:", err);
+    return res.status(500).json({
+      ok: false,
+      error: "Error interno al listar guías disponibles.",
+      detail: err.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
+/* =========================
+   POST /interno/lotes/:id/guias/batch
+========================= */
+router.post("/:id/guias/batch", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const loteId = asInt(req.params.id);
+    const guiaIds = Array.isArray(req.body?.guia_ids) ? req.body.guia_ids.map(asInt) : [];
+    const u = getUser(req);
+
+    if (!mustBeAuthenticatedUser(u)) {
+      return res.status(401).json({ ok: false, error: "No autenticado." });
+    }
+    if (!Number.isFinite(loteId) || loteId <= 0) {
+      return res.status(400).json({ ok: false, error: "ID de lote inválido." });
+    }
+    if (!guiaIds.length) {
+      return res.status(400).json({ ok: false, error: "Debe informar guia_ids." });
+    }
+
+    const idsValidos = guiaIds.filter((x) => Number.isFinite(x) && x > 0);
+    const idsSet = new Set(idsValidos);
+
+    if (idsValidos.length !== guiaIds.length || idsSet.size !== idsValidos.length) {
+      return res.status(400).json({
+        ok: false,
+        error: "La lista de guia_ids contiene valores inválidos o duplicados."
+      });
+    }
+
+    await client.query("BEGIN");
+
+    const lote = await obtenerLoteCabecera(client, loteId);
+    if (!lote) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ ok: false, error: "Lote no encontrado." });
+    }
+    if (lote.estado !== "ABIERTO") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        error: "Solo se pueden agregar guías a un lote ABIERTO."
+      });
+    }
+    if (!canUseSucursal(u, lote.sucursal_origen_id)) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({
+        ok: false,
+        error: "No tenés permiso para operar este lote desde la sucursal origen."
+      });
+    }
+
+    const estadoEsperado = expectedEstadoGuiaParaAgregar(lote.tipo_lote);
+    if (!estadoEsperado) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        ok: false,
+        error: `Tipo de lote inválido o no soportado: ${lote.tipo_lote}`
+      });
+    }
+
+    const qGuias = await client.query(
+      `
+        SELECT
+          g.id,
+          g.numero_guia,
+          g.sucursal_origen_id,
+          g.sucursal_destino_id,
+          g.estado_logistico,
+          g.estado_pago,
+          g.tipo_cobro,
+          COALESCE((
+            SELECT SUM(COALESCE(gi.cantidad, 0))::int
+            FROM guia_items gi
+            WHERE gi.guia_id = g.id
+          ), 0) AS cant_bultos_calc
+        FROM guias g
+        WHERE g.id = ANY($1::int[])
+        ORDER BY g.id ASC
+      `,
+      [idsValidos]
+    );
+
+    const guias = qGuias.rows || [];
+    if (guias.length !== idsValidos.length) {
+      const encontrados = new Set(guias.map((g) => Number(g.id)));
+      const faltantes = idsValidos.filter((id) => !encontrados.has(id));
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        ok: false,
+        error: "Una o más guías no existen.",
+        faltantes
+      });
+    }
+
+    const conflictos = [];
+    const paraInsertar = [];
+
+    for (const guia of guias) {
+      const guiaId = Number(guia.id);
+      const tipoLote = String(lote.tipo_lote || "").trim().toUpperCase();
+      const estadoLogistico = String(guia.estado_logistico || "").trim().toUpperCase();
+      const tipoCobro = String(guia.tipo_cobro || "").trim().toUpperCase();
+      const estadoPago = String(guia.estado_pago || "").trim().toLowerCase();
+      const cantBultos = Number(guia.cant_bultos_calc || 0);
+
+      const guiaEnOtro = await guiaEnLoteActivo(client, guiaId);
+      if (guiaEnOtro && Number(guiaEnOtro.id) !== Number(loteId)) {
+        conflictos.push({
+          guia_id: guiaId,
+          numero_guia: guia.numero_guia,
+          error: "La guía ya pertenece a otro lote activo.",
+          lote_activo: guiaEnOtro
+        });
+        continue;
+      }
+
+      if (estadoLogistico !== estadoEsperado) {
+        conflictos.push({
+          guia_id: guiaId,
+          numero_guia: guia.numero_guia,
+          error: `La guía debe estar en ${estadoEsperado} para entrar a un lote ${tipoLote}.`
+        });
+        continue;
+      }
+
+      if (tipoLote === "COLECTA") {
+        if (Number(guia.sucursal_origen_id) !== Number(lote.sucursal_origen_id)) {
+          conflictos.push({
+            guia_id: guiaId,
+            numero_guia: guia.numero_guia,
+            error: "La guía no pertenece a la sucursal origen del lote de colecta."
+          });
+          continue;
+        }
+      } else if (tipoLote === "DISTRIBUCION") {
+        if (Number(guia.sucursal_destino_id) !== Number(lote.sucursal_destino_id)) {
+          conflictos.push({
+            guia_id: guiaId,
+            numero_guia: guia.numero_guia,
+            error: "La guía no coincide con el destino final del lote de distribución."
+          });
+          continue;
+        }
+      } else {
+        conflictos.push({
+          guia_id: guiaId,
+          numero_guia: guia.numero_guia,
+          error: `Tipo de lote no soportado: ${tipoLote}`
+        });
+        continue;
+      }
+
+      if (tipoCobro === "ORIGEN" && estadoPago === "pendiente_origen") {
+        conflictos.push({
+          guia_id: guiaId,
+          numero_guia: guia.numero_guia,
+          error: "Una guía con cobro en ORIGEN debe estar cobrada para entrar al lote."
+        });
+        continue;
+      }
+
+      if (!Number.isFinite(cantBultos) || cantBultos <= 0) {
+        conflictos.push({
+          guia_id: guiaId,
+          numero_guia: guia.numero_guia,
+          error: "La guía no tiene cantidad de bultos válida."
+        });
+        continue;
+      }
+
+      paraInsertar.push({
+        guia_id: guiaId,
+        numero_guia: guia.numero_guia,
+        cant_bultos_declarada: cantBultos,
+        guia_sucursal_destino_id: guia.sucursal_destino_id
+      });
+    }
+
+    if (conflictos.length) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        error: "No se pudo agregar el lote completo porque hay guías con conflicto.",
+        conflictos
+      });
+    }
+
+    for (const guia of paraInsertar) {
+      await client.query(
+        `
+          INSERT INTO lote_guias (
+            lote_id, guia_id, cant_bultos_declarada
+          )
+          VALUES ($1, $2, $3)
+        `,
+        [loteId, guia.guia_id, guia.cant_bultos_declarada]
+      );
+
+      await insertarEventoLote(client, {
+        loteId,
+        evento: "guia_agregada",
+        payload: {
+          guia_id: guia.guia_id,
+          numero_guia: guia.numero_guia,
+          cant_bultos_declarada: guia.cant_bultos_declarada,
+          guia_sucursal_destino_id: guia.guia_sucursal_destino_id
+        },
+        userId: u.userId,
+        usuario: u.usuario
+      });
+    }
+
+    await recalcularTotalesLote(client, loteId);
+
+    await client.query("COMMIT");
+
+    return res.json({
+      ok: true,
+      message: `${paraInsertar.length} guía(s) agregadas al lote.`,
+      lote_id: loteId,
+      agregadas: paraInsertar.map((g) => ({
+        guia_id: g.guia_id,
+        numero_guia: g.numero_guia
+      }))
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("POST /interno/lotes/:id/guias/batch error:", err);
+    return res.status(500).json({
+      ok: false,
+      error: "Error interno al agregar guías al lote.",
+      detail: err.message
+    });
+  } finally {
+    client.release();
   }
 });
 
@@ -754,16 +1211,26 @@ router.post("/:id/guias", async (req, res) => {
       return res.status(404).json({ ok: false, error: "Guía no encontrada." });
     }
 
-    const estadoEsperado = expectedEstadoGuiaParaAgregar(lote.tipo_lote);
-    if (String(guia.estado_logistico || "").toUpperCase() !== estadoEsperado) {
+    const tipoLote = String(lote.tipo_lote || "").trim().toUpperCase();
+    const estadoEsperado = expectedEstadoGuiaParaAgregar(tipoLote);
+
+    if (!estadoEsperado) {
       await client.query("ROLLBACK");
-      return res.status(409).json({
+      return res.status(400).json({
         ok: false,
-        error: `La guía debe estar en ${estadoEsperado} para entrar a un lote ${lote.tipo_lote}.`
+        error: `Tipo de lote inválido o no soportado: ${lote.tipo_lote}`
       });
     }
 
-    if (lote.tipo_lote === "COLECTA") {
+    if (String(guia.estado_logistico || "").trim().toUpperCase() !== estadoEsperado) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        error: `La guía debe estar en ${estadoEsperado} para entrar a un lote ${tipoLote}.`
+      });
+    }
+
+    if (tipoLote === "COLECTA") {
       if (Number(guia.sucursal_origen_id) !== Number(lote.sucursal_origen_id)) {
         await client.query("ROLLBACK");
         return res.status(409).json({
@@ -771,7 +1238,7 @@ router.post("/:id/guias", async (req, res) => {
           error: "La guía no pertenece a la sucursal origen del lote de colecta."
         });
       }
-    } else {
+    } else if (tipoLote === "DISTRIBUCION") {
       if (Number(guia.sucursal_destino_id) !== Number(lote.sucursal_destino_id)) {
         await client.query("ROLLBACK");
         return res.status(409).json({
@@ -779,6 +1246,12 @@ router.post("/:id/guias", async (req, res) => {
           error: "La guía no coincide con el destino final del lote de distribución."
         });
       }
+    } else {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        ok: false,
+        error: `Tipo de lote inválido o no soportado: ${tipoLote}`
+      });
     }
 
     const tipoCobro = String(guia.tipo_cobro || "").trim().toUpperCase();
@@ -1077,6 +1550,14 @@ router.post("/:id/despachar", async (req, res) => {
       [loteId]
     );
 
+    if (!upLote.rows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        error: "No se pudo despachar. Verificá que el lote siga CONSOLIDADO."
+      });
+    }
+
     for (const g of qGuias.rows) {
       const deValor = String(g.estado_logistico || "").toUpperCase();
       if (deValor !== estadoOrigenEsperado) continue;
@@ -1176,8 +1657,74 @@ router.post("/:id/recepcion", async (req, res) => {
       });
     }
 
+    const qGuiasLote = await client.query(
+      `
+        SELECT
+          lg.guia_id,
+          lg.estado_recepcion,
+          g.estado_logistico
+        FROM lote_guias lg
+        JOIN guias g ON g.id = lg.guia_id
+        WHERE lg.lote_id = $1
+        ORDER BY lg.id ASC
+      `,
+      [loteId]
+    );
+
+    const guiasLote = qGuiasLote.rows || [];
+    if (!guiasLote.length) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        error: "El lote no tiene guías para recepcionar."
+      });
+    }
+
+    const idsLote = new Set(guiasLote.map((x) => Number(x.guia_id)));
+    const idsPayload = [];
+    const idsPayloadSet = new Set();
+
+    for (const it of items) {
+      const guiaId = asInt(it?.guia_id);
+      if (!Number.isFinite(guiaId) || guiaId <= 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ ok: false, error: "Hay guia_id inválido en recepción." });
+      }
+      if (idsPayloadSet.has(guiaId)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          ok: false,
+          error: `La guía ${guiaId} está repetida en la recepción.`
+        });
+      }
+      idsPayloadSet.add(guiaId);
+      idsPayload.push(guiaId);
+    }
+
+    for (const guiaId of idsPayload) {
+      if (!idsLote.has(guiaId)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          ok: false,
+          error: `La guía ${guiaId} no pertenece al lote.`
+        });
+      }
+    }
+
+    for (const fila of guiasLote) {
+      if (!idsPayloadSet.has(Number(fila.guia_id))) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          ok: false,
+          error: `Falta informar recepción para la guía ${fila.guia_id}. Debe resolverse todo el lote.`
+        });
+      }
+    }
+
     const estadoEsperadoEnRecepcion =
-      lote.tipo_lote === "DISTRIBUCION" ? "EN_TRANSITO_A_DESTINO" : "EN_TRANSITO_A_CENTRAL";
+      String(lote.tipo_lote || "").trim().toUpperCase() === "DISTRIBUCION"
+        ? "EN_TRANSITO_A_DESTINO"
+        : "EN_TRANSITO_A_CENTRAL";
 
     const estadoDestinoRecepcionOK = expectedEstadoGuiaRecepcionOK(lote.tipo_lote);
     const estadoDestinoRecepcionObservada = expectedEstadoGuiaRecepcionObservada(lote.tipo_lote);
@@ -1197,11 +1744,6 @@ router.post("/:id/recepcion", async (req, res) => {
       const guiaId = asInt(it?.guia_id);
       const estadoRecepcion = cleanText(it?.estado_recepcion, 20).toUpperCase();
       const obs = cleanText(it?.observacion_recepcion, 2000);
-
-      if (!Number.isFinite(guiaId) || guiaId <= 0) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ ok: false, error: "Hay guia_id inválido en recepción." });
-      }
 
       if (!["RECIBIDO_OK", "FALTANTE", "DANADO", "OBSERVADO"].includes(estadoRecepcion)) {
         await client.query("ROLLBACK");
@@ -1258,13 +1800,30 @@ router.post("/:id/recepcion", async (req, res) => {
         await client.query(
           `
             UPDATE guias
-            SET estado_logistico = $2
+            SET
+              estado_logistico = $2,
+              novedad_hub_tipo = CASE
+                WHEN $2 = 'RECIBIDO_CENTRAL' THEN NULL
+                ELSE novedad_hub_tipo
+              END,
+              novedad_hub_detalle = CASE
+                WHEN $2 = 'RECIBIDO_CENTRAL' THEN NULL
+                ELSE novedad_hub_detalle
+              END,
+              novedad_hub_abierta = CASE
+                WHEN $2 = 'RECIBIDO_CENTRAL' THEN false
+                ELSE novedad_hub_abierta
+              END,
+              novedad_hub_resolucion = CASE
+                WHEN $2 = 'RECIBIDO_CENTRAL' THEN NULL
+                ELSE novedad_hub_resolucion
+              END
             WHERE id = $1
               AND estado_logistico = $3
           `,
           [guiaId, estadoDestinoRecepcionOK, estadoEsperadoEnRecepcion]
         );
-
+        
         if (deValor === estadoEsperadoEnRecepcion) {
           await insertarHistorialMovimiento(client, {
             guiaId,
@@ -1290,17 +1849,38 @@ router.post("/:id/recepcion", async (req, res) => {
           userId: u.userId,
           usuario: u.usuario
         });
-      } else if (estadoRecepcion === "DANADO" || estadoRecepcion === "OBSERVADO") {
+                    } else if (estadoRecepcion === "DANADO" || estadoRecepcion === "OBSERVADO") {
         const deValor = String(chk.rows[0].estado_logistico || "").toUpperCase();
+        const tipoLoteActual = String(lote.tipo_lote || "").trim().toUpperCase();
+        const esHub = isRecepcionHub(tipoLoteActual);
+
+        const nuevoEstadoGuia = esHub
+          ? "RECIBIDO_CENTRAL"
+          : estadoDestinoRecepcionObservada;
+
+        const novedadTipo = estadoRecepcion === "DANADO" ? "DANADO" : "OBSERVADO";
+        const evento = estadoRecepcion === "DANADO" ? "guia_danada" : "guia_observada";
 
         await client.query(
           `
             UPDATE guias
-            SET estado_logistico = $2
+            SET
+              estado_logistico = $2,
+              novedad_hub_tipo = CASE WHEN $4 THEN $5 ELSE novedad_hub_tipo END,
+              novedad_hub_detalle = CASE WHEN $4 THEN $6 ELSE novedad_hub_detalle END,
+              novedad_hub_abierta = CASE WHEN $4 THEN true ELSE novedad_hub_abierta END,
+              novedad_hub_resolucion = CASE WHEN $4 THEN 'CONTINUAR_ENVIO' ELSE novedad_hub_resolucion END
             WHERE id = $1
               AND estado_logistico = $3
           `,
-          [guiaId, estadoDestinoRecepcionObservada, estadoEsperadoEnRecepcion]
+          [
+            guiaId,
+            nuevoEstadoGuia,
+            estadoEsperadoEnRecepcion,
+            esHub,
+            novedadTipo,
+            obs || `${novedadTipo} en recepción HUB`
+          ]
         );
 
         if (deValor === estadoEsperadoEnRecepcion) {
@@ -1308,7 +1888,7 @@ router.post("/:id/recepcion", async (req, res) => {
             guiaId,
             tipo: "ESTADO",
             deValor: estadoEsperadoEnRecepcion,
-            aValor: estadoDestinoRecepcionObservada,
+            aValor: nuevoEstadoGuia,
             sucursalId: lote.sucursal_destino_id,
             userId: u.userId,
             usuario: u.usuario,
@@ -1317,11 +1897,6 @@ router.post("/:id/recepcion", async (req, res) => {
           });
         }
 
-        const evento =
-          estadoRecepcion === "DANADO"
-            ? "guia_danada"
-            : "guia_observada";
-
         await insertarEventoLote(client, {
           loteId,
           evento,
@@ -1329,7 +1904,9 @@ router.post("/:id/recepcion", async (req, res) => {
             guia_id: guiaId,
             observacion_recepcion: obs || null,
             tipo_lote: lote.tipo_lote,
-            nuevo_estado_guia: estadoDestinoRecepcionObservada
+            nuevo_estado_guia: nuevoEstadoGuia,
+            novedad_hub_tipo: esHub ? novedadTipo : null,
+            novedad_hub_resolucion: esHub ? "CONTINUAR_ENVIO" : null
           },
           userId: u.userId,
           usuario: u.usuario
@@ -1364,31 +1941,50 @@ router.post("/:id/recepcion", async (req, res) => {
     );
 
     const resumen = qResumen.rows[0];
-    let estadoFinal = "RECIBIDO_CON_NOVEDAD";
-
-    if (Number(resumen.ok_count) === Number(resumen.total)) {
-      estadoFinal = "RECIBIDO_TOTAL";
-    } else if (Number(resumen.ok_count) > 0 && Number(resumen.novedad_count) > 0) {
-      estadoFinal = "RECIBIDO_PARCIAL";
-    }
+    const resultadoRecepcion = calcularResultadoRecepcion(
+      resumen.total,
+      resumen.ok_count,
+      resumen.novedad_count
+    );
 
     const up = await client.query(
       `
         UPDATE lotes_colecta
         SET
-          estado = $2,
-          recibido_en = NOW()
+          estado = 'RECIBIDO',
+          resultado_recepcion = $2,
+          recibido_en = NOW(),
+          recibido_por_user_id = $3,
+          recibido_por_usuario = $4
         WHERE id = $1
-        RETURNING id, numero_lote, tipo_lote, estado, recibido_en
+          AND estado = 'DESPACHADO'
+        RETURNING
+          id,
+          numero_lote,
+          tipo_lote,
+          estado,
+          resultado_recepcion,
+          recibido_en,
+          recibido_por_user_id,
+          recibido_por_usuario
       `,
-      [loteId, estadoFinal]
+      [loteId, resultadoRecepcion, u.userId, u.usuario]
     );
+
+    if (!up.rows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        error: "No se pudo registrar la recepción. Verificá que el lote siga DESPACHADO."
+      });
+    }
 
     await insertarEventoLote(client, {
       loteId,
       evento: "recepcion_cerrada",
       payload: {
-        estado_final: estadoFinal,
+        estado_final: "RECIBIDO",
+        resultado_recepcion: resultadoRecepcion,
         observacion_general: observacionGeneral || null,
         tipo_lote: lote.tipo_lote
       },
@@ -1409,6 +2005,111 @@ router.post("/:id/recepcion", async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: "Error interno al registrar recepción.",
+      detail: err.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
+/* =========================
+   POST /interno/lotes/:id/cerrar
+========================= */
+router.post("/:id/cerrar", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const loteId = asInt(req.params.id);
+    const u = getUser(req);
+    const observacionCierre = cleanText(req.body?.observacion_cierre, 2000);
+
+    if (!mustBeAuthenticatedUser(u)) {
+      return res.status(401).json({ ok: false, error: "No autenticado." });
+    }
+    if (!Number.isFinite(loteId) || loteId <= 0) {
+      return res.status(400).json({ ok: false, error: "ID de lote inválido." });
+    }
+
+    await client.query("BEGIN");
+
+    const lote = await obtenerLoteCabecera(client, loteId);
+    if (!lote) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ ok: false, error: "Lote no encontrado." });
+    }
+
+    if (!isEstadoLoteRecibido(lote.estado)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        error: "Solo se puede cerrar un lote en estado RECIBIDO."
+      });
+    }
+
+    if (!canUseSucursal(u, lote.sucursal_destino_id)) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({
+        ok: false,
+        error: "No tenés permiso para cerrar este lote."
+      });
+    }
+
+    const up = await client.query(
+      `
+        UPDATE lotes_colecta
+        SET
+          estado = 'CERRADO',
+          cerrado_en = NOW(),
+          cerrado_por_user_id = $2,
+          cerrado_por_usuario = $3
+        WHERE id = $1
+          AND estado = 'RECIBIDO'
+        RETURNING
+          id,
+          numero_lote,
+          tipo_lote,
+          estado,
+          resultado_recepcion,
+          recibido_en,
+          cerrado_en,
+          cerrado_por_user_id,
+          cerrado_por_usuario
+      `,
+      [loteId, u.userId, u.usuario]
+    );
+
+    if (!up.rows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        error: "No se pudo cerrar el lote."
+      });
+    }
+
+    await insertarEventoLote(client, {
+      loteId,
+      evento: "cerrado",
+      payload: {
+        observacion_cierre: observacionCierre || null,
+        resultado_recepcion: lote.resultado_recepcion || null,
+        tipo_lote: lote.tipo_lote
+      },
+      userId: u.userId,
+      usuario: u.usuario
+    });
+
+    await client.query("COMMIT");
+
+    return res.json({
+      ok: true,
+      message: "Lote cerrado.",
+      lote: up.rows[0]
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("POST /interno/lotes/:id/cerrar error:", err);
+    return res.status(500).json({
+      ok: false,
+      error: "Error interno al cerrar lote.",
       detail: err.message
     });
   } finally {
@@ -1467,6 +2168,14 @@ router.post("/:id/anular", async (req, res) => {
       [loteId]
     );
 
+    if (!up.rows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        error: "No se pudo anular el lote."
+      });
+    }
+
     await insertarEventoLote(client, {
       loteId,
       evento: "anulado",
@@ -1498,3 +2207,7 @@ router.post("/:id/anular", async (req, res) => {
 });
 
 module.exports = router;
+module.exports.__testables = {
+  isEstadoLoteRecibido,
+  calcularResultadoRecepcion
+};

@@ -160,16 +160,13 @@
     }));
   }
 
-    function computePayGateOk() {
-  const forma = $("forma_pago").value;
-  const confirm = $("confirmar_pago")?.checked === true;
+  function computePayGateOk() {
+    const forma = $("forma_pago").value;
+    const confirm = $("confirmar_pago")?.checked === true;
 
-  // DESTINO siempre puede crearse
-  if (forma === "DESTINO") return true;
-
-  // ORIGEN: exigir confirmación real
-  return confirm;
-}
+    if (forma === "DESTINO") return true;
+    return confirm;
+  }
 
   function domicilioOk() {
     const dom = $("entrega_domicilio").value === "true";
@@ -301,6 +298,17 @@
     return Number.isFinite(n) ? n.toFixed(2) : "0.00";
   }
 
+  function getCotizacionErrorMessage(data) {
+    const code = String(data?.code || "").trim().toUpperCase();
+
+    if (code === "MAX_KG_AGENCIA") {
+      const maxKg = Number(data?.max_kg_agencia || 200);
+      return `Carga fuera de estándar de agencia. Supera el máximo operativo de ${maxKg} kg y requiere cotización especial.`;
+    }
+
+    return String(data?.error || "No se pudo cotizar en este momento.");
+  }
+
   async function cotizarLive() {
     const payload = payloadCotizar();
 
@@ -317,7 +325,10 @@
     try {
       const r = await fetch("/guias/cotizar", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token() },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token(),
+        },
         body: JSON.stringify(payload),
       });
 
@@ -327,7 +338,7 @@
       if (!r.ok || !data.ok) {
         lastCotOk = false;
         resetKPIs();
-        setStatus(data?.error ? `Cotización: ${data.error}` : "Cotización: error", "warn");
+        setStatus(`Cotización: ${getCotizacionErrorMessage(data)}`, "warn");
         refreshCreateButton();
         return;
       }
@@ -337,16 +348,16 @@
       $("k_kgc").textContent = Number(d.kg_cobrable).toFixed(2);
       $("k_env").textContent = `$ ${Number(d.valor_envio).toFixed(2)}`;
       $("k_tot").textContent = `$ ${Number(d.total).toFixed(2)}`;
-
       $("valor_seguro").value = Number(d.seguro).toFixed(2);
 
       lastCotOk = true;
       setStatus("Cotización OK", "ok");
       refreshCreateButton();
-    } catch (_e) {
+    } catch (err) {
       lastCotOk = false;
       resetKPIs();
       setStatus("Cotización: error de red", "bad");
+      if (DEBUG) console.error("[cotizar] error", err);
       refreshCreateButton();
     }
   }
@@ -398,10 +409,10 @@
     if (btnCrear.disabled) return;
 
     if (!computePayGateOk()) {
-  setStatus("Marcá la confirmación de cobro para crear una guía con pago en ORIGEN", "warn");
-  refreshCreateButton();
-  return;
-}
+      setStatus("Marcá la confirmación de cobro para crear una guía con pago en ORIGEN", "warn");
+      refreshCreateButton();
+      return;
+    }
 
     $("sucursal_destino_id").value = "";
     $("entrega_domicilio").value = "false";
