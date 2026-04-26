@@ -1,5 +1,5 @@
 (() => {
-  console.log("CONTABILIDAD_AGENCIAS JS V4 CARGADO");
+  console.log("CONTABILIDAD_AGENCIAS JS V6 CARGADO");
 
   const $ = (id) => document.getElementById(id);
   const LS_TOKEN = "exr_token";
@@ -69,10 +69,6 @@
   function setValue(id, value) {
     const el = $(id);
     if (el) el.value = value ?? "";
-  }
-
-  function hasEl(id) {
-    return !!$(id);
   }
 
   function roleUpper() {
@@ -157,7 +153,7 @@
     else if (visible === "ANULADA") cls = "bad";
 
     const nueva = der?.nueva
-      ? `<span class="ca-pill" style="background:#5c1f2a;color:#ffd3db;border-color:#9b3046">NUEVA</span> `
+      ? `<span class="ca-pill bad">NUEVA</span> `
       : "";
 
     return `${nueva}<span class="ca-pill ${cls}">${esc(visible || "-")}</span>`;
@@ -234,10 +230,7 @@
       Number(selectedLiquidacionId) > 0;
 
     const saldoPendiente =
-      Number(
-        currentLiquidacion?.resumen?.saldo_pendiente_absoluto ??
-        0
-      ) || 0;
+      Number(currentLiquidacion?.resumen?.saldo_pendiente_absoluto ?? 0) || 0;
 
     const estadoLiq = String(
       currentLiquidacion?.resumen?.estado ||
@@ -279,108 +272,116 @@
     `;
   }
 
-function renderAgencias(items) {
-  const tb = $("tbAgencias");
-  if (!tb) return;
+  function renderAgencias(items) {
+    const tb = $("tbAgencias");
+    if (!tb) return;
 
-  if (!items?.length) {
-    tb.innerHTML = `<tr><td colspan="9" class="ca-empty">No hay agencias configuradas para liquidación</td></tr>`;
-    return;
+    if (!items?.length) {
+      tb.innerHTML = `<tr><td colspan="9" class="ca-empty">No hay agencias configuradas para liquidación</td></tr>`;
+      return;
+    }
+
+    tb.innerHTML = items.map((row) => {
+      const selected =
+        Number(selectedSucursalId) === Number(row.sucursal_id)
+          ? ` class="ca-selected"`
+          : "";
+
+      const saldoAbierto = Number(row.saldo_abierto || 0);
+      const saldoLiquidable = Number(row.saldo_liquidable || 0);
+      const saldoEnLiquidacion = Number(row.saldo_en_liquidacion || 0);
+
+      return `
+        <tr data-sucursal-id="${row.sucursal_id}"${selected}>
+          <td>
+            <strong>${esc(row.sucursal_nombre)}</strong><br>
+            <span class="ca-muted ca-code">#${row.sucursal_id}</span>
+          </td>
+
+          <td>
+            <strong>${money(row.creditos_abiertos)}</strong>
+            <div class="ca-muted">Solo PENDIENTE</div>
+          </td>
+
+          <td>
+            <strong>${money(row.debitos_abiertos)}</strong>
+            <div class="ca-muted">Solo PENDIENTE</div>
+          </td>
+
+          <td>
+            <strong>${money(saldoAbierto)}</strong>
+            <div class="ca-muted">Abierto real</div>
+          </td>
+
+          <td>
+            <strong>${money(saldoLiquidable)}</strong>
+            <div class="ca-muted">Bloqueado para cierre</div>
+          </td>
+
+          <td>
+            <strong>${Number(row.cant_pendiente || 0)}</strong>
+            <div class="ca-muted">movs. pendientes</div>
+          </td>
+
+          <td>
+            <strong>${Number(row.cant_bloqueado_cierre || 0)}</strong>
+            <div class="ca-muted">movs. bloqueados</div>
+          </td>
+
+          <td>
+            <strong>${Number(row.cant_en_liquidacion || 0)}</strong>
+            <div class="ca-muted">${money(saldoEnLiquidacion)}</div>
+          </td>
+
+          <td>${agencyActionButtons(row)}</td>
+        </tr>
+      `;
+    }).join("");
+
+    [...tb.querySelectorAll("tr[data-sucursal-id]")].forEach((tr) => {
+      tr.addEventListener("click", async () => {
+        const sid = Number(tr.dataset.sucursalId);
+        const ag = agencias.find((x) => Number(x.sucursal_id) === sid);
+        selectAgency(sid, ag?.sucursal_nombre || "");
+        await safeAction(async () => {
+          await loadMovimientos();
+          await loadLiquidables();
+          await loadLiquidacionesListado();
+        }, "No se pudo cargar la agencia seleccionada.");
+      });
+    });
+
+    [...tb.querySelectorAll(".btn-ver-mov")].forEach((b) => {
+      b.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        selectAgency(Number(b.dataset.id), b.dataset.nombre || "");
+        await safeAction(async () => {
+          await loadMovimientos();
+          await loadLiquidacionesListado();
+        }, "No se pudieron cargar los movimientos.");
+      });
+    });
+
+    [...tb.querySelectorAll(".btn-ver-liq")].forEach((b) => {
+      b.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        selectAgency(Number(b.dataset.id), b.dataset.nombre || "");
+        await safeAction(async () => {
+          await loadLiquidables();
+          await loadLiquidacionesListado();
+        }, "No se pudieron cargar los liquidables.");
+      });
+    });
+
+    [...tb.querySelectorAll(".btn-gen-liq")].forEach((b) => {
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectAgency(Number(b.dataset.id), b.dataset.nombre || "");
+        openGenerarLiquidacionDialog();
+      });
+    });
   }
 
-  tb.innerHTML = items.map((row) => {
-    const selected =
-      Number(selectedSucursalId) === Number(row.sucursal_id)
-        ? ` class="ca-selected"`
-        : "";
-
-    const saldoAbierto = Number(row.saldo_abierto || 0);
-    const saldoLiquidable = Number(row.saldo_liquidable || 0);
-    const saldoEnLiquidacion = Number(row.saldo_en_liquidacion || 0);
-
-    return `
-      <tr data-sucursal-id="${row.sucursal_id}"${selected}>
-        <td>
-          <strong>${esc(row.sucursal_nombre)}</strong><br>
-          <span class="ca-muted ca-code">#${row.sucursal_id}</span>
-        </td>
-
-        <td>
-          <strong>${money(row.creditos_abiertos)}</strong>
-          <div class="ca-muted">Pendiente real</div>
-        </td>
-
-        <td>
-          <strong>${money(row.debitos_abiertos)}</strong>
-          <div class="ca-muted">Pendiente real</div>
-        </td>
-
-        <td>
-          <strong>${money(saldoAbierto)}</strong>
-          <div class="ca-muted">Solo estado PENDIENTE</div>
-        </td>
-
-        <td>
-          <strong>${money(saldoLiquidable)}</strong>
-          <div class="ca-muted">Bloqueado para cierre</div>
-        </td>
-
-        <td>
-          <strong>${Number(row.cant_pendiente || 0)}</strong>
-          <div class="ca-muted">movs. pendientes</div>
-        </td>
-
-        <td>
-          <strong>${Number(row.cant_bloqueado_cierre || 0)}</strong>
-          <div class="ca-muted">movs. bloqueados</div>
-        </td>
-
-        <td>
-          <strong>${Number(row.cant_en_liquidacion || 0)}</strong>
-          <div class="ca-muted">${money(saldoEnLiquidacion)}</div>
-        </td>
-
-        <td>${agencyActionButtons(row)}</td>
-      </tr>
-    `;
-  }).join("");
-
-  [...tb.querySelectorAll("tr[data-sucursal-id]")].forEach((tr) => {
-    tr.addEventListener("click", async () => {
-      const sid = Number(tr.dataset.sucursalId);
-      const ag = agencias.find((x) => Number(x.sucursal_id) === sid);
-      selectAgency(sid, ag?.sucursal_nombre || "");
-      await safeAction(async () => {
-        await loadMovimientos();
-        await loadLiquidables();
-      }, "No se pudo cargar la agencia seleccionada.");
-    });
-  });
-
-  [...tb.querySelectorAll(".btn-ver-mov")].forEach((b) => {
-    b.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      selectAgency(Number(b.dataset.id), b.dataset.nombre || "");
-      await safeAction(loadMovimientos, "No se pudieron cargar los movimientos.");
-    });
-  });
-
-  [...tb.querySelectorAll(".btn-ver-liq")].forEach((b) => {
-    b.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      selectAgency(Number(b.dataset.id), b.dataset.nombre || "");
-      await safeAction(loadLiquidables, "No se pudieron cargar los liquidables.");
-    });
-  });
-
-  [...tb.querySelectorAll(".btn-gen-liq")].forEach((b) => {
-    b.addEventListener("click", (e) => {
-      e.stopPropagation();
-      selectAgency(Number(b.dataset.id), b.dataset.nombre || "");
-      openGenerarLiquidacionDialog();
-    });
-  });
-}
   function renderMovimientos(items) {
     const tb = $("tbMovimientos");
     if (!tb) return;
@@ -597,82 +598,93 @@ function renderAgencias(items) {
     syncActionButtons();
   }
 
-function selectAgency(sucursalId, sucursalNombre) {
-  selectedSucursalId = Number(sucursalId);
-  selectedSucursalNombre = String(sucursalNombre || "");
+  function selectAgency(sucursalId, sucursalNombre) {
+    selectedSucursalId = Number(sucursalId);
+    selectedSucursalNombre = String(sucursalNombre || "");
 
-  fillSelectedAgencyUI();
-  renderAgencias(agencias);
+    fillSelectedAgencyUI();
+    renderAgencias(agencias);
+    renderLiquidacionesListado();
 
-  const ag = agencias.find((x) => Number(x.sucursal_id) === Number(selectedSucursalId));
+    const ag = agencias.find((x) => Number(x.sucursal_id) === Number(selectedSucursalId));
 
-  setResumenEstado(
-    "Agencia seleccionada",
-    ag
-      ? `${selectedSucursalNombre} (#${selectedSucursalId}) • Abierto real: ${money(ag.saldo_abierto || 0)} • Liquidable: ${money(ag.saldo_liquidable || 0)} • En liquidación: ${money(ag.saldo_en_liquidacion || 0)}`
-      : `${selectedSucursalNombre} (#${selectedSucursalId})`
-  );
-
-  syncActionButtons();
-}
-  async function loadAuth() {
-    const data = await apiGet("/test-auth");
-    authUser = data.user;
-
-    setText(
-      "who",
-      `${authUser?.usuario || "usuario"} • rol ${authUser?.rol || "?"} • sucursal_id ${authUser?.sucursal_id ?? "?"}`
+    setResumenEstado(
+      "Agencia seleccionada",
+      ag
+        ? `${selectedSucursalNombre} (#${selectedSucursalId}) • Abierto real: ${money(ag.saldo_abierto || 0)} • Liquidable: ${money(ag.saldo_liquidable || 0)} • En liquidación: ${money(ag.saldo_en_liquidacion || 0)}`
+        : `${selectedSucursalNombre} (#${selectedSucursalId})`
     );
+
+    syncActionButtons();
   }
 
-async function loadResumen() {
-  setResumenEstado("Cargando…", "Consultando resumen de agencias");
+          async function loadAuth() {
+  const data = await apiGet("/test-auth");
+  authUser = data.user;
 
-  const data = await apiGet(`${API}/agencias/resumen`);
-  agencias = data.items || [];
-
-  if (!agencias.length) {
-    renderAgencias([]);
-    selectedSucursalId = null;
-    selectedSucursalNombre = "";
-    fillSelectedAgencyUI();
-    resetMovimientosBox();
-    resetLiquidablesBox();
-    resetLiquidacionBox();
-    setResumenEstado("Sin agencias", "No hay agencias configuradas para liquidación");
-    syncActionButtons();
+  const rol = String(authUser?.rol || "").trim().toUpperCase();
+  if (!["OWNER", "ADMIN"].includes(rol)) {
+    alert("No tenés permisos para ingresar a Contabilidad Agencias.");
+    location.replace("/panel.html");
     return;
   }
 
-  const stillExists = agencias.some(
-    (x) => Number(x.sucursal_id) === Number(selectedSucursalId)
-  );
-
-  if (!stillExists) {
-    selectedSucursalId = Number(agencias[0].sucursal_id);
-    selectedSucursalNombre = String(agencias[0].sucursal_nombre || "");
-  } else {
-    const found = agencias.find(
-      (x) => Number(x.sucursal_id) === Number(selectedSucursalId)
-    );
-    selectedSucursalNombre = String(found?.sucursal_nombre || "");
-  }
-
-  fillSelectedAgencyUI();
-  renderAgencias(agencias);
-  syncActionButtons();
-
-  const ag = agencias.find(
-    (x) => Number(x.sucursal_id) === Number(selectedSucursalId)
-  );
-
-  setResumenEstado(
-    "Listo",
-    ag
-      ? `${agencias.length} agencia(s) • activa: ${selectedSucursalNombre} (#${selectedSucursalId}) • Saldo abierto = solo PENDIENTE • Abierto actual: ${money(ag.saldo_abierto || 0)}`
-      : `${agencias.length} agencia(s)`
+  setText(
+    "who",
+    `${authUser?.usuario || "usuario"} • rol ${authUser?.rol || "?"} • sucursal_id ${authUser?.sucursal_id ?? "?"}`
   );
 }
+
+  async function loadResumen() {
+    setResumenEstado("Cargando…", "Consultando resumen de agencias");
+
+    const data = await apiGet(`${API}/agencias/resumen`);
+    agencias = data.items || [];
+
+    if (!agencias.length) {
+      renderAgencias([]);
+      selectedSucursalId = null;
+      selectedSucursalNombre = "";
+      fillSelectedAgencyUI();
+      resetMovimientosBox();
+      resetLiquidablesBox();
+      resetLiquidacionesListadoBox();
+      resetLiquidacionBox();
+      setResumenEstado("Sin agencias", "No hay agencias configuradas para liquidación");
+      syncActionButtons();
+      return;
+    }
+
+    const stillExists = agencias.some(
+      (x) => Number(x.sucursal_id) === Number(selectedSucursalId)
+    );
+
+    if (!stillExists) {
+      selectedSucursalId = Number(agencias[0].sucursal_id);
+      selectedSucursalNombre = String(agencias[0].sucursal_nombre || "");
+    } else {
+      const found = agencias.find(
+        (x) => Number(x.sucursal_id) === Number(selectedSucursalId)
+      );
+      selectedSucursalNombre = String(found?.sucursal_nombre || "");
+    }
+
+    fillSelectedAgencyUI();
+    renderAgencias(agencias);
+    syncActionButtons();
+
+    const ag = agencias.find(
+      (x) => Number(x.sucursal_id) === Number(selectedSucursalId)
+    );
+
+    setResumenEstado(
+      "Listo",
+      ag
+        ? `${agencias.length} agencia(s) • activa: ${selectedSucursalNombre} (#${selectedSucursalId}) • Abierto real actual: ${money(ag.saldo_abierto || 0)} • Liquidable: ${money(ag.saldo_liquidable || 0)}`
+        : `${agencias.length} agencia(s)`
+    );
+  }
+
   async function loadMovimientos() {
     if (!selectedSucursalId) {
       resetMovimientosBox();
@@ -681,10 +693,7 @@ async function loadResumen() {
 
     const fd = clean($("movFechaDesde")?.value);
     const fh = clean($("movFechaHasta")?.value);
-    const estado = clean($("movEstado").value || "PENDIENTE");
-    if (!$("movEstado").value) {
-    $("movEstado").value = "PENDIENTE";
-  }    
+    const estado = clean($("movEstado")?.value);
     const q = clean($("movQ")?.value);
 
     const qs = new URLSearchParams();
@@ -714,6 +723,31 @@ async function loadResumen() {
     renderLiquidables(data);
   }
 
+  async function bloquearPendientes() {
+  if (!selectedSucursalId) {
+    alert("Seleccioná una agencia primero.");
+    return;
+  }
+
+  const fechaDesde = clean($("liqFechaDesde")?.value);
+  const fechaHasta = clean($("liqFechaHasta")?.value);
+
+  if (!confirm("¿Bloquear movimientos PENDIENTE para dejarlos listos para liquidación?")) {
+    return;
+  }
+
+  const data = await apiPost(`${API}/agencias/${selectedSucursalId}/bloquear-pendientes`, {
+    fecha_desde: fechaDesde || null,
+    fecha_hasta: fechaHasta || null,
+    observaciones: "Bloqueado desde Contabilidad Agencias"
+  });
+
+  alert(data.message || "Movimientos bloqueados.");
+
+  await loadResumen();
+  await loadMovimientos();
+  await loadLiquidables();
+}
   async function loadLiquidacionesResumen() {
     try {
       const data = await apiGet(`${API}/liquidaciones/resumen`);
@@ -989,6 +1023,10 @@ async function loadResumen() {
 
     $("chkLiquidacionesSoloNoVistas")?.addEventListener("change", () =>
       safeAction(renderLiquidacionesListado, "No se pudo refrescar el listado.")
+    );
+
+    $("btnBloquearPendientes")?.addEventListener("click", () =>
+      safeAction(bloquearPendientes, "No se pudieron bloquear los movimientos pendientes.")
     );
 
     $("btnMovimientosBuscar")?.addEventListener("click", () =>

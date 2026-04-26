@@ -19,6 +19,28 @@ function hasValue(v) {
   return v !== undefined && v !== null && v !== "";
 }
 
+function isObservedLogState(estadoLogistico) {
+  return [
+    "RECIBIDO_CENTRAL_OBSERVADO",
+    "RECIBIDO_DESTINO_OBSERVADO"
+  ].includes(normStr(estadoLogistico));
+}
+
+function isTransitState(estadoLogistico) {
+  return [
+    "EN_TRANSITO",
+    "EN_TRANSITO_A_CENTRAL",
+    "EN_TRANSITO_A_DESTINO"
+  ].includes(normStr(estadoLogistico));
+}
+
+function isDestinoState(estadoLogistico) {
+  return [
+    "RECIBIDO_DESTINO",
+    "RECIBIDO_DESTINO_OBSERVADO"
+  ].includes(normStr(estadoLogistico));
+}
+
 function deriveCierreEstado(row) {
   const cierreId = row?.cierre_id ?? row?.cierreId ?? null;
   const cierreEstadoDb = normStr(row?.cierre_estado_db ?? row?.cierre_estado);
@@ -82,24 +104,28 @@ function deriveSituacionOperativa(row) {
   const observada = normBool(row?.observada);
   const excepcionEntrega = normBool(row?.excepcion_entrega);
 
-  if (observada || estadoPago === "OBSERVADO" || excepcionEntrega) {
-    return SITUACION_OPERATIVA.OBSERVADA;
-  }
+  const destinoObservado = estadoLogistico === "RECIBIDO_DESTINO_OBSERVADO";
+  const centralObservado = estadoLogistico === "RECIBIDO_CENTRAL_OBSERVADO";
+
+  const requiereCobroPrevio =
+    isDestinoState(estadoLogistico) &&
+    condicionPago === "DESTINO" &&
+    cobroObligatorioEntrega &&
+    estadoPago === "PENDIENTE_DESTINO";
 
   if (estadoLogistico === "RECIBIDO_ORIGEN") {
     return SITUACION_OPERATIVA.PENDIENTE_DESPACHO;
   }
 
-  if (estadoLogistico === "EN_TRANSITO") {
+  if (isTransitState(estadoLogistico)) {
     return SITUACION_OPERATIVA.EN_TRANSITO;
   }
 
-  if (estadoLogistico === "RECIBIDO_DESTINO") {
-    const requiereCobroPrevio =
-      condicionPago === "DESTINO" &&
-      cobroObligatorioEntrega &&
-      estadoPago === "PENDIENTE_DESTINO";
+  if (estadoLogistico === "RECIBIDO_CENTRAL" || centralObservado) {
+    return SITUACION_OPERATIVA.OBSERVADA;
+  }
 
+  if (isDestinoState(estadoLogistico)) {
     if (requiereCobroPrevio) {
       return SITUACION_OPERATIVA.PENDIENTE_COBRO_DESTINO;
     }
@@ -109,6 +135,10 @@ function deriveSituacionOperativa(row) {
 
   if (estadoLogistico === "ENTREGADO") {
     return SITUACION_OPERATIVA.ENTREGADA;
+  }
+
+  if (observada || estadoPago === "OBSERVADO" || excepcionEntrega || destinoObservado) {
+    return SITUACION_OPERATIVA.OBSERVADA;
   }
 
   return SITUACION_OPERATIVA.OBSERVADA;
@@ -158,7 +188,7 @@ function deriveBloqueos(row, cierreEstado, liquidacionEstado, conciliacionEstado
   const cobroObligatorioEntrega = normBool(row?.cobro_obligatorio_entrega);
 
   const requiereCobroPrevio =
-    estadoLogistico === "RECIBIDO_DESTINO" &&
+    isDestinoState(estadoLogistico) &&
     condicionPago === "DESTINO" &&
     cobroObligatorioEntrega &&
     estadoPago === "PENDIENTE_DESTINO";
@@ -203,14 +233,29 @@ function deriveBloqueos(row, cierreEstado, liquidacionEstado, conciliacionEstado
 
 function deriveAlertas(row) {
   const alertas = [];
+  const estadoLogistico = normStr(row?.estado_logistico);
   const estadoPago = normStr(row?.estado_pago);
   const observada = normBool(row?.observada);
   const excepcionEntrega = normBool(row?.excepcion_entrega);
 
-  if (observada || estadoPago === "OBSERVADO") {
+  if (observada || estadoPago === "OBSERVADO" || isObservedLogState(estadoLogistico)) {
     alertas.push({
       codigo: "OBSERVADA",
       mensaje: "Guía con observación operativa/contable"
+    });
+  }
+
+  if (estadoLogistico === "RECIBIDO_CENTRAL_OBSERVADO") {
+    alertas.push({
+      codigo: "NOVEDAD_HUB",
+      mensaje: "Incidencia detectada en HUB"
+    });
+  }
+
+  if (estadoLogistico === "RECIBIDO_DESTINO_OBSERVADO") {
+    alertas.push({
+      codigo: "NOVEDAD_DESTINO",
+      mensaje: "Incidencia detectada en destino"
     });
   }
 
@@ -236,12 +281,16 @@ function deriveAccionPrincipal(row, liquidacionEstado, conciliacionEstado) {
     return ACCION_PRINCIPAL.DESPACHAR;
   }
 
-  if (estadoLogistico === "EN_TRANSITO") {
+  if (estadoLogistico === "EN_TRANSITO_A_DESTINO") {
     return ACCION_PRINCIPAL.RECIBIR_DESTINO;
   }
 
+  if (estadoLogistico === "EN_TRANSITO" || estadoLogistico === "EN_TRANSITO_A_CENTRAL") {
+    return ACCION_PRINCIPAL.VER_DETALLE;
+  }
+
   if (
-    estadoLogistico === "RECIBIDO_DESTINO" &&
+    isDestinoState(estadoLogistico) &&
     condicionPago === "DESTINO" &&
     cobroObligatorioEntrega &&
     estadoPago === "PENDIENTE_DESTINO"
@@ -250,7 +299,7 @@ function deriveAccionPrincipal(row, liquidacionEstado, conciliacionEstado) {
   }
 
   if (
-    estadoLogistico === "RECIBIDO_DESTINO" &&
+    isDestinoState(estadoLogistico) &&
     ["COBRADO_DESTINO", "NO_APLICA", "OBSERVADO", "RENDIDO"].includes(estadoPago)
   ) {
     return ACCION_PRINCIPAL.ENTREGAR;

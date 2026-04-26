@@ -104,7 +104,7 @@ router.get("/operativo", async (req, res) => {
       `SELECT COUNT(*)::int AS count
        FROM guias
        WHERE (sucursal_origen_id = $1 OR sucursal_destino_id = $1)
-         AND estado_logistico = 'EN_TRANSITO'
+AND estado_logistico IN ('EN_TRANSITO', 'EN_TRANSITO_A_CENTRAL', 'EN_TRANSITO_A_DESTINO')
          AND created_at < NOW() - INTERVAL '72 hours'`,
       [sucursalId]
     );

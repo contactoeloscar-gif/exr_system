@@ -6,10 +6,15 @@ const pool = require("../config/db");
 
 function traducirEstado(estado) {
   const mapa = {
-    RECIBIDO_ORIGEN: "Recibido en sucursal de origen",
-    EN_TRANSITO: "En tránsito hacia destino",
-    RECIBIDO_DESTINO: "Disponible en sucursal de destino",
-    ENTREGADO: "Entregado",
+RECIBIDO_ORIGEN: "Recibido en sucursal de origen",
+EN_TRANSITO: "En tránsito",
+EN_TRANSITO_A_CENTRAL: "En tránsito hacia HUB",
+RECIBIDO_CENTRAL: "Recibido en HUB",
+RECIBIDO_CENTRAL_OBSERVADO: "Recibido en HUB con observación",
+EN_TRANSITO_A_DESTINO: "En tránsito hacia sucursal destino",
+RECIBIDO_DESTINO: "Disponible en sucursal de destino",
+RECIBIDO_DESTINO_OBSERVADO: "Disponible en destino con observación",
+ENTREGADO: "Entregado",
   };
   return mapa[estado] || estado;
 }

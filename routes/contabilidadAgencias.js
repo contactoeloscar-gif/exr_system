@@ -571,6 +571,108 @@ router.get("/agencias/:sucursalId/liquidables", async (req, res) => {
   }
 });
 
+router.post("/agencias/:sucursalId/bloquear-pendientes", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const u = assertAdminRole(req, res);
+    if (!u) return;
+
+    const sucursalId = asInt(req.params.sucursalId);
+    const fechaDesde = asDate(req.body?.fecha_desde);
+    const fechaHasta = asDate(req.body?.fecha_hasta);
+    const observaciones = cleanText(req.body?.observaciones, 500);
+
+    if (!Number.isFinite(sucursalId) || sucursalId <= 0) {
+      return res.status(400).json({ ok: false, error: "sucursalId inválido." });
+    }
+
+    await client.query("BEGIN");
+
+    const params = [sucursalId];
+    const where = [`sucursal_id = $1`, `estado = 'PENDIENTE'`];
+
+    if (fechaDesde) {
+      params.push(fechaDesde);
+      where.push(`fecha_operativa >= $${params.length}::date`);
+    }
+
+    if (fechaHasta) {
+      params.push(fechaHasta);
+      where.push(`fecha_operativa <= $${params.length}::date`);
+    }
+
+    const preview = await client.query(
+      `
+        SELECT
+          id,
+          sentido,
+          concepto,
+          importe,
+          fecha_operativa,
+          guia_id
+        FROM sucursal_ctacte_movimientos
+        WHERE ${where.join(" AND ")}
+        ORDER BY fecha_operativa ASC, id ASC
+      `,
+      params
+    );
+
+    if (!preview.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        error: "No hay movimientos PENDIENTE para bloquear en ese rango."
+      });
+    }
+
+    const up = await client.query(
+      `
+        UPDATE sucursal_ctacte_movimientos
+        SET
+          estado = 'BLOQUEADO_CIERRE',
+          descripcion = CASE
+            WHEN COALESCE(descripcion, '') = '' THEN $${params.length + 1}
+            ELSE descripcion || ' | ' || $${params.length + 1}
+          END
+        WHERE ${where.join(" AND ")}
+        RETURNING id, sentido, importe
+      `,
+      [...params, observaciones || "Bloqueado para liquidación"]
+    );
+
+    const resumen = up.rows.reduce(
+      (acc, row) => {
+        const imp = round2(row.importe);
+        if (row.sentido === "CREDITO_AGENCIA") acc.total_creditos += imp;
+        if (row.sentido === "DEBITO_AGENCIA") acc.total_debitos += imp;
+        return acc;
+      },
+      { total_creditos: 0, total_debitos: 0 }
+    );
+
+    resumen.saldo_neto = round2(resumen.total_creditos - resumen.total_debitos);
+
+    await client.query("COMMIT");
+
+    return res.json({
+      ok: true,
+      message: `${up.rowCount || 0} movimiento(s) pasaron a BLOQUEADO_CIERRE.`,
+      total: up.rowCount || 0,
+      resumen
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("POST /interno/contabilidad/agencias/:sucursalId/bloquear-pendientes error:", err);
+    return res.status(500).json({
+      ok: false,
+      error: "Error interno al bloquear movimientos pendientes.",
+      detail: err.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
 /* =========================
    POST /interno/contabilidad/liquidaciones/generar
 ========================= */

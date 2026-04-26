@@ -104,45 +104,43 @@
     $("valor_seguro").value = seguro.toFixed(2);
   }
 
-  function addItemRow(seed = {}) {
-    const wrap = document.createElement("div");
-    wrap.className = "itemrow";
-    wrap.style.cssText =
-      "display:grid;grid-template-columns:90px 90px 90px 90px 90px 44px;gap:10px;margin-bottom:10px;align-items:end;";
+function addItemRow(seed = {}) {
+  const wrap = document.createElement("div");
+  wrap.className = "cg-items-row itemrow";
 
-    wrap.innerHTML = `
-      <label>Bultos
-        <input class="it_bultos" type="number" min="1" value="${seed.bultos ?? 1}">
-      </label>
-      <label>Peso (kg)
-        <input class="it_peso" placeholder="1" value="${seed.peso_kg ?? 2}">
-      </label>
-      <label>Largo (cm)
-        <input class="it_l" placeholder="10" value="${seed.largo_cm ?? 10}">
-      </label>
-      <label>Ancho (cm)
-        <input class="it_a" placeholder="10" value="${seed.ancho_cm ?? 10}">
-      </label>
-      <label>Alto (cm)
-        <input class="it_h" placeholder="10" value="${seed.alto_cm ?? 10}">
-      </label>
-      <button class="btn bad it_del" title="Eliminar">✕</button>
-    `;
+  wrap.innerHTML = `
+    <label class="exr-pro-field">Bultos
+      <input class="exr-pro-input it_bultos" type="number" min="1" value="${seed.bultos ?? 1}">
+    </label>
+    <label class="exr-pro-field">Peso (kg)
+      <input class="exr-pro-input it_peso" placeholder="1" value="${seed.peso_kg ?? 2}">
+    </label>
+    <label class="exr-pro-field">Largo (cm)
+      <input class="exr-pro-input it_l" placeholder="10" value="${seed.largo_cm ?? 10}">
+    </label>
+    <label class="exr-pro-field">Ancho (cm)
+      <input class="exr-pro-input it_a" placeholder="10" value="${seed.ancho_cm ?? 10}">
+    </label>
+    <label class="exr-pro-field">Alto (cm)
+      <input class="exr-pro-input it_h" placeholder="10" value="${seed.alto_cm ?? 10}">
+    </label>
+    <button type="button" class="exr-pro-btn bad it_del" title="Eliminar">✕</button>
+  `;
 
-    wrap.querySelector(".it_del").addEventListener("click", () => {
-      wrap.remove();
-      debouncedCotizar();
-    });
+  wrap.querySelector(".it_del").addEventListener("click", () => {
+    wrap.remove();
+    debouncedCotizar();
+  });
 
-    ["it_bultos", "it_peso", "it_l", "it_a", "it_h"].forEach((cls) => {
-      const el = wrap.querySelector("." + cls);
-      el.addEventListener("input", debouncedCotizar);
-      el.addEventListener("change", debouncedCotizar);
-      el.addEventListener("keyup", debouncedCotizar);
-    });
+  ["it_bultos", "it_peso", "it_l", "it_a", "it_h"].forEach((cls) => {
+    const el = wrap.querySelector("." + cls);
+    el.addEventListener("input", debouncedCotizar);
+    el.addEventListener("change", debouncedCotizar);
+    el.addEventListener("keyup", debouncedCotizar);
+  });
 
-    elItems.appendChild(wrap);
-  }
+  elItems.appendChild(wrap);
+}
 
   function collectItems() {
     const rows = [...elItems.querySelectorAll(".itemrow")];
@@ -404,48 +402,41 @@
       .join("");
   }
 
-  $("btnReset").addEventListener("click", (e) => {
-    e.preventDefault();
-    if (btnCrear.disabled) return;
+$("btnReset").addEventListener("click", (e) => {
+  e.preventDefault();
 
-    if (!computePayGateOk()) {
-      setStatus("Marcá la confirmación de cobro para crear una guía con pago en ORIGEN", "warn");
-      refreshCreateButton();
-      return;
-    }
+  $("sucursal_destino_id").value = "";
+  $("entrega_domicilio").value = "false";
+  $("observaciones").value = "";
 
-    $("sucursal_destino_id").value = "";
-    $("entrega_domicilio").value = "false";
-    $("observaciones").value = "";
+  $("remitente_nombre").value = "";
+  $("remitente_tel").value = "";
+  $("remitente_dni").value = "";
 
-    $("remitente_nombre").value = "";
-    $("remitente_tel").value = "";
-    $("remitente_dni").value = "";
+  $("destinatario_nombre").value = "";
+  $("destinatario_tel").value = "";
+  $("destinatario_dni").value = "";
+  $("destinatario_dir").value = "";
 
-    $("destinatario_nombre").value = "";
-    $("destinatario_tel").value = "";
-    $("destinatario_dni").value = "";
-    $("destinatario_dir").value = "";
+  $("forma_pago").value = "ORIGEN";
+  $("metodo_pago").value = "EFECTIVO";
 
-    $("forma_pago").value = "ORIGEN";
-    $("metodo_pago").value = "EFECTIVO";
+  if ($("estado_pago")) $("estado_pago").value = "no_aplica";
+  if ($("confirmar_pago")) $("confirmar_pago").checked = false;
 
-    if ($("estado_pago")) $("estado_pago").value = "no_aplica";
-    if ($("confirmar_pago")) $("confirmar_pago").checked = false;
+  $("valor_declarado").value = "";
+  if ($("preset_bulto")) $("preset_bulto").value = "";
 
-    $("valor_declarado").value = "";
-    if ($("preset_bulto")) $("preset_bulto").value = "";
+  resetKPIs();
+  setStatus("Listo", "");
 
-    resetKPIs();
-    setStatus("Listo", "");
+  elItems.innerHTML = "";
+  addItemRow({ bultos: 1, peso_kg: 2, largo_cm: 10, ancho_cm: 10, alto_cm: 10 });
 
-    elItems.innerHTML = "";
-    addItemRow({ bultos: 1, peso_kg: 2, largo_cm: 10, ancho_cm: 10, alto_cm: 10 });
-
-    syncPagoUI();
-    refreshCreateButton();
-    debouncedCotizar();
-  });
+  syncPagoUI();
+  refreshCreateButton();
+  debouncedCotizar();
+});
 
   $("btnSalir").addEventListener("click", () => {
     localStorage.removeItem(LS_TOKEN);

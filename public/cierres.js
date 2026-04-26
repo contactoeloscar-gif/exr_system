@@ -7,6 +7,7 @@
     fecha: null,
     estado: null,
     preview: null,
+    loading: false,
   };
 
   const api = async (url, opts = {}) => {
@@ -47,15 +48,28 @@
     return s || fallback;
   }
 
+  function fmtNum(v) {
+    const n = Number(v || 0);
+    return Number.isFinite(n) ? String(n) : "0";
+  }
+
   function isOwnerRole(rol) {
     return ["OWNER", "ADMIN"].includes(norm(rol));
+  }
+
+  function pill(text, type = "") {
+    return `<span class="c-pill ${type}">${text}</span>`;
+  }
+
+  function goLogin() {
+    window.location.href = "/operador.html";
   }
 
   function showFlash(type, text) {
     const box = $("flashBox");
     if (!box) return;
     box.style.display = "block";
-    box.innerHTML = `<div class="msg ${type}">${text}</div>`;
+    box.innerHTML = `<div class="exr-pro-msg ${type}">${text}</div>`;
   }
 
   function clearFlash() {
@@ -65,8 +79,32 @@
     box.innerHTML = "";
   }
 
+  function setBusy(flag) {
+    state.loading = !!flag;
+    [
+      "btn_refresh",
+      "btn_preview_mi",
+      "btn_cerrar_mi",
+      "btn_preview_global",
+      "btn_cerrar_global",
+      "fecha",
+    ].forEach((id) => {
+      const el = $(id);
+      if (el) el.disabled = !!flag;
+    });
+  }
+
   async function getMe() {
-    return api("/interno/ping");
+    try {
+      return await api("/interno/ping");
+    } catch (err) {
+      if (err?.status === 401) {
+        alert("Sesión vencida o no autenticada.");
+        goLogin();
+        return null;
+      }
+      throw err;
+    }
   }
 
   async function loadEstado(fecha) {
@@ -99,7 +137,72 @@
   function clearPreview() {
     state.preview = null;
     const box = $("previewBox");
-    if (box) box.innerHTML = `<div class="muted">Sin preview cargado.</div>`;
+    if (box) box.innerHTML = `<div class="exr-pro-empty">Sin preview cargado.</div>`;
+  }
+
+  function renderKpis() {
+    const box = $("kpiRow");
+    if (!box) return;
+
+    const me = state.me || {};
+    const st = state.estado || {};
+    const owner = isOwnerRole(me?.user?.rol || "");
+    const cierres = st.cierres || [];
+
+    if (owner) {
+      const totalSuc = (st.sucursales || []).length;
+      const cerradasSuc = cierres.filter(
+        (x) => norm(x.scope_modo) === "SUCURSAL" && norm(x.estado) === "CERRADO"
+      ).length;
+      const faltantes = (st.faltantes_sucursal_id || []).length;
+      const globalPermitido = !!st.global_permitido;
+
+      box.innerHTML = `
+        <div class="c-kpi">
+          <div class="c-kpi-label">Fecha</div>
+          <div class="c-kpi-value">${fmtText(state.fecha)}</div>
+        </div>
+        <div class="c-kpi">
+          <div class="c-kpi-label">Sucursales</div>
+          <div class="c-kpi-value">${fmtNum(totalSuc)}</div>
+        </div>
+        <div class="c-kpi">
+          <div class="c-kpi-label">Sucursales cerradas</div>
+          <div class="c-kpi-value">${fmtNum(cerradasSuc)}</div>
+        </div>
+        <div class="c-kpi">
+          <div class="c-kpi-label">Faltantes</div>
+          <div class="c-kpi-value">${fmtNum(faltantes)}</div>
+        </div>
+        <div class="c-kpi">
+          <div class="c-kpi-label">Cierre global</div>
+          <div class="c-kpi-value">${globalPermitido ? "Habilitado" : "Pendiente"}</div>
+        </div>
+      `;
+      return;
+    }
+
+    const cierre = st.cierre || null;
+    const estado = cierre?.estado || "PENDIENTE";
+
+    box.innerHTML = `
+      <div class="c-kpi">
+        <div class="c-kpi-label">Fecha</div>
+        <div class="c-kpi-value">${fmtText(state.fecha)}</div>
+      </div>
+      <div class="c-kpi">
+        <div class="c-kpi-label">Mi estado</div>
+        <div class="c-kpi-value">${fmtText(estado)}</div>
+      </div>
+      <div class="c-kpi">
+        <div class="c-kpi-label">Cierre ID</div>
+        <div class="c-kpi-value">${fmtText(cierre?.id)}</div>
+      </div>
+      <div class="c-kpi">
+        <div class="c-kpi-label">Cerrado en</div>
+        <div class="c-kpi-value">${fmtTS(cierre?.cerrado_en)}</div>
+      </div>
+    `;
   }
 
   function renderTopEstado() {
@@ -123,12 +226,12 @@
 
       box.innerHTML = `
         <div><b>Vista:</b> Owner/Admin</div>
-        <div style="margin-top:8px" class="row">
-          <span class="pill ${globalPermitido ? "ok" : "bad"}">GLOBAL permitido: ${globalPermitido ? "SI" : "NO"}</span>
+        <div class="c-row" style="margin-top:8px;">
+          ${pill(`GLOBAL ${globalPermitido ? "habilitado" : "pendiente"}`, globalPermitido ? "ok" : "bad")}
           ${
             falt.length
-              ? `<span class="pill bad">Faltan cierres SUCURSAL: ${falt.join(", ")}</span>`
-              : `<span class="pill ok">Todas las sucursales del día están cerradas</span>`
+              ? pill(`Faltan cierres SUCURSAL: ${falt.join(", ")}`, "bad")
+              : pill("Todas las sucursales del día están cerradas", "ok")
           }
         </div>
       `;
@@ -139,11 +242,11 @@
     const estado = cierre?.estado || "PENDIENTE";
 
     box.innerHTML = `
-      <div><b>Vista:</b> Sucursal propia</div>
-      <div style="margin-top:8px" class="row">
-        <span class="pill ${norm(estado) === "CERRADO" ? "ok" : "warn"}">Estado mi sucursal: ${estado}</span>
-        <span class="pill">Cierre ID: ${cierre?.id ?? "-"}</span>
-        <span class="pill">Cerrado en: ${fmtTS(cierre?.cerrado_en)}</span>
+      <div><b>Vista:</b> Mi sucursal</div>
+      <div class="c-row" style="margin-top:8px;">
+        ${pill(`Estado: ${estado}`, norm(estado) === "CERRADO" ? "ok" : "warn")}
+        ${pill(`Cierre ID: ${cierre?.id ?? "-"}`)}
+        ${pill(`Cerrado en: ${fmtTS(cierre?.cerrado_en)}`)}
       </div>
     `;
   }
@@ -159,126 +262,95 @@
 
     tb.innerHTML = "";
 
+    function resumenCell(c) {
+      if (!c) return `<span class="c-small c-muted">Sin cierre todavía</span>`;
+      return `
+        <div class="c-small">Pagadas: <b>${fmtNum(c.cantidad_pagadas)}</b></div>
+        <div class="c-small">CE: <b>${fmtNum(c.cantidad_ce_pendiente)}</b></div>
+        <div class="c-small">Guías: <b>${fmtNum(c.total_entregadas)}</b></div>
+      `;
+    }
+
+    function actionsHtml(scope, id, estado, cierreId) {
+      const closed = norm(estado) === "CERRADO";
+      return `
+        <div class="c-actions">
+          <button class="exr-pro-btn" data-preview="${scope}:${id}">Preview</button>
+          <button class="exr-pro-btn ok" data-close="${scope}:${id}" ${closed ? "disabled" : ""}>Cerrar</button>
+          ${cierreId ? `<button class="exr-pro-btn" data-comp="${cierreId}">Comprobante</button>` : ""}
+        </div>
+      `;
+    }
+
     if (!owner) {
       const sucursal = st.sucursal || { id: mySuc, codigo: "MI", nombre: "Mi sucursal" };
       const c = st.cierre || null;
       const estado = c ? c.estado : "PENDIENTE";
-      const cerradoEn = c?.cerrado_en || null;
-      const cierreId = c?.id || "-";
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>
           <div><b>${fmtText(sucursal.codigo, "S" + (sucursal.id ?? ""))}</b> — ${fmtText(sucursal.nombre)}</div>
-          <div class="muted small">id:${sucursal.id ?? "-"}</div>
+          <div class="c-small c-muted">id:${sucursal.id ?? "-"}</div>
         </td>
-        <td><span class="pill ${norm(estado) === "CERRADO" ? "ok" : "warn"}">${estado}</span></td>
-        <td class="muted">${fmtTS(cerradoEn)}</td>
-        <td>${cierreId}</td>
-        <td>
-          ${
-            c
-              ? `
-                <div class="small">Pagadas: ${c.cantidad_pagadas ?? 0}</div>
-                <div class="small">CE: ${c.cantidad_ce_pendiente ?? 0}</div>
-                <div class="small">Guías: ${c.total_entregadas ?? 0}</div>
-              `
-              : `<span class="muted small">Sin cierre todavía</span>`
-          }
-        </td>
-        <td>
-          <div class="actions">
-            <button class="btn" data-preview-mine="1">Preview</button>
-            <button class="btn ok" data-close-mine="1" ${norm(estado) === "CERRADO" ? "disabled" : ""}>Cerrar</button>
-            ${c?.id ? `<button class="btn" data-comp="${c.id}">Ver comprobante</button>` : ""}
-          </div>
-        </td>
+        <td>${pill(estado, norm(estado) === "CERRADO" ? "ok" : "warn")}</td>
+        <td class="c-muted">${fmtTS(c?.cerrado_en)}</td>
+        <td>${c?.id ?? "-"}</td>
+        <td>${resumenCell(c)}</td>
+        <td>${actionsHtml("SUCURSAL", sucursal.id, estado, c?.id)}</td>
       `;
       tb.appendChild(tr);
+    } else {
+      const sucursales = st.sucursales || [];
+      const cierres = st.cierres || [];
 
-      tb.querySelector('[data-preview-mine="1"]')?.addEventListener("click", async () => {
-        try {
-          clearFlash();
-          await doPreviewMiSucursal();
-        } catch (e) {
-          showFlash("bad", (e?.data?.error) || e.message);
-        }
-      });
+      function findCierre(scope, sucursalId) {
+        return (
+          cierres.find(
+            (c) =>
+              norm(c.scope_modo) === scope &&
+              Number(c.sucursal_id) === Number(sucursalId)
+          ) || null
+        );
+      }
 
-      tb.querySelector('[data-close-mine="1"]')?.addEventListener("click", async () => {
-        try {
-          clearFlash();
-          await confirmCloseMiSucursal();
-        } catch (e) {
-          showFlash("bad", (e?.data?.error) || e.message);
-        }
-      });
+      for (const s of sucursales) {
+        const c = findCierre("SUCURSAL", s.id);
+        const estado = c ? c.estado : "PENDIENTE";
 
-      tb.querySelector("[data-comp]")?.addEventListener("click", () => {
-        openComprobante(c?.id);
-      });
-
-      return;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>
+            <div><b>${fmtText(s.codigo, "S" + s.id)}</b> — ${fmtText(s.nombre)}</div>
+            <div class="c-small c-muted">id:${s.id}</div>
+          </td>
+          <td>${pill(estado, norm(estado) === "CERRADO" ? "ok" : "warn")}</td>
+          <td class="c-muted">${fmtTS(c?.cerrado_en)}</td>
+          <td>${c?.id ?? "-"}</td>
+          <td>${resumenCell(c)}</td>
+          <td>${actionsHtml("SUCURSAL", s.id, estado, c?.id)}</td>
+        `;
+        tb.appendChild(tr);
+      }
     }
 
-    const sucursales = st.sucursales || [];
-    const cierres = st.cierres || [];
-
-    function findCierre(scope, sucursalId) {
-      return (
-        cierres.find(
-          (c) =>
-            norm(c.scope_modo) === scope &&
-            Number(c.sucursal_id) === Number(sucursalId)
-        ) || null
-      );
-    }
-
-    for (const s of sucursales) {
-      const c = findCierre("SUCURSAL", s.id);
-      const estado = c ? c.estado : "PENDIENTE";
-      const cerradoEn = c?.cerrado_en || null;
-      const cierreId = c?.id || "-";
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>
-          <div><b>${fmtText(s.codigo, "S" + s.id)}</b> — ${fmtText(s.nombre)}</div>
-          <div class="muted small">id:${s.id}</div>
-        </td>
-        <td><span class="pill ${norm(estado) === "CERRADO" ? "ok" : "warn"}">${estado}</span></td>
-        <td class="muted">${fmtTS(cerradoEn)}</td>
-        <td>${cierreId}</td>
-        <td>
-          ${
-            c
-              ? `
-                <div class="small">Pagadas: ${c.cantidad_pagadas ?? 0}</div>
-                <div class="small">CE: ${c.cantidad_ce_pendiente ?? 0}</div>
-                <div class="small">Guías: ${c.total_entregadas ?? 0}</div>
-              `
-              : `<span class="muted small">Pendiente</span>`
-          }
-        </td>
-        <td>
-          <div class="actions">
-            <button class="btn" data-preview-suc="${s.id}">Preview</button>
-            <button class="btn ok" data-close-suc="${s.id}" ${norm(estado) === "CERRADO" ? "disabled" : ""}>Cerrar</button>
-            ${c?.id ? `<button class="btn" data-comp="${c.id}">Ver comprobante</button>` : ""}
-          </div>
-        </td>
-      `;
-      tb.appendChild(tr);
-    }
-
-    tb.querySelectorAll("button[data-preview-suc]").forEach((btn) => {
+    tb.querySelectorAll("button[data-preview]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        const sid = Number(btn.getAttribute("data-preview-suc"));
-        if (!sid) return;
+        const raw = btn.getAttribute("data-preview") || "";
+        const [scope, idRaw] = raw.split(":");
+        const sid = Number(idRaw || 0);
+
         btn.disabled = true;
         try {
           clearFlash();
-          await doPreviewSucursal(sid);
+          if (scope === "SUCURSAL") {
+            const ownerLocal = isOwnerRole(state?.me?.user?.rol || "");
+            if (ownerLocal) {
+              await doPreviewSucursal(sid);
+            } else {
+              await doPreviewMiSucursal();
+            }
+          }
         } catch (e) {
           showFlash("bad", (e?.data?.error) || e.message);
         } finally {
@@ -287,14 +359,23 @@
       });
     });
 
-    tb.querySelectorAll("button[data-close-suc]").forEach((btn) => {
+    tb.querySelectorAll("button[data-close]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        const sid = Number(btn.getAttribute("data-close-suc"));
-        if (!sid) return;
+        const raw = btn.getAttribute("data-close") || "";
+        const [scope, idRaw] = raw.split(":");
+        const sid = Number(idRaw || 0);
+
         btn.disabled = true;
         try {
           clearFlash();
-          await confirmCloseSucursalOwner(sid);
+          if (scope === "SUCURSAL") {
+            const ownerLocal = isOwnerRole(state?.me?.user?.rol || "");
+            if (ownerLocal) {
+              await confirmCloseSucursalOwner(sid);
+            } else {
+              await confirmCloseMiSucursal();
+            }
+          }
         } catch (e) {
           showFlash("bad", (e?.data?.error) || e.message);
         } finally {
@@ -317,7 +398,7 @@
 
     const p = state.preview;
     if (!p) {
-      box.innerHTML = `<div class="muted">Sin preview cargado.</div>`;
+      box.innerHTML = `<div class="exr-pro-empty">Sin preview cargado.</div>`;
       return;
     }
 
@@ -330,45 +411,48 @@
         : "GLOBAL";
 
     const resumenHtml = `
-      <div class="summary-grid">
-        <div class="summary-item">
-          <div class="k">Guías</div>
-          <div class="v">${tot.total_entregadas ?? 0}</div>
+      <div class="c-summary-grid">
+        <div class="c-kpi">
+          <div class="c-kpi-label">Guías</div>
+          <div class="c-kpi-value">${fmtNum(tot.total_entregadas)}</div>
         </div>
-        <div class="summary-item">
-          <div class="k">Pagadas</div>
-          <div class="v">${tot.cantidad_pagadas ?? 0}</div>
+        <div class="c-kpi">
+          <div class="c-kpi-label">Pagadas</div>
+          <div class="c-kpi-value">${fmtNum(tot.cantidad_pagadas)}</div>
         </div>
-        <div class="summary-item">
-          <div class="k">Contra entrega</div>
-          <div class="v">${tot.cantidad_ce_pendiente ?? 0}</div>
+        <div class="c-kpi">
+          <div class="c-kpi-label">Contra entrega</div>
+          <div class="c-kpi-value">${fmtNum(tot.cantidad_ce_pendiente)}</div>
         </div>
-        <div class="summary-item">
-          <div class="k">Bultos</div>
-          <div class="v">${tot.total_bultos ?? 0}</div>
+        <div class="c-kpi">
+          <div class="c-kpi-label">Bultos</div>
+          <div class="c-kpi-value">${fmtNum(tot.total_bultos)}</div>
         </div>
       </div>
     `;
 
     if (scope === "GLOBAL") {
       box.innerHTML = `
-        <div><b>Preview:</b> GLOBAL</div>
-        <div class="muted small" style="margin-top:6px">Fecha: ${fmtText(p.fecha)}</div>
-        <div class="muted small" style="margin-top:2px">Universo: cierres SUCURSAL cerrados del día</div>
-
-        <div style="margin-top:10px" class="row">
-          <span class="pill ${p.global_permitido ? "ok" : "bad"}">GLOBAL permitido: ${p.global_permitido ? "SI" : "NO"}</span>
-          ${
-            (p.faltantes_sucursal_id || []).length
-              ? `<span class="pill bad">Faltan cierres: ${(p.faltantes_sucursal_id || []).join(", ")}</span>`
-              : `<span class="pill ok">Todas las sucursales cerradas</span>`
-          }
+        <div class="c-preview-head">
+          <div>
+            <div><b>Preview:</b> GLOBAL</div>
+            <div class="c-small c-muted" style="margin-top:4px">Fecha: ${fmtText(p.fecha)}</div>
+            <div class="c-small c-muted">Universo: cierres SUCURSAL cerrados del día</div>
+          </div>
+          <div class="c-row">
+            ${pill(`GLOBAL ${p.global_permitido ? "habilitado" : "pendiente"}`, p.global_permitido ? "ok" : "bad")}
+            ${
+              (p.faltantes_sucursal_id || []).length
+                ? pill(`Faltan: ${(p.faltantes_sucursal_id || []).join(", ")}`, "bad")
+                : pill("Todas las sucursales cerradas", "ok")
+            }
+          </div>
         </div>
 
         ${resumenHtml}
 
-        <div class="empty" style="margin-top:12px">
-          El cierre GLOBAL consolida los cierres SUCURSAL del día y no muestra detalle individual de guías en esta vista.
+        <div class="exr-pro-empty" style="margin-top:12px">
+          El cierre GLOBAL consolida los cierres SUCURSAL del día. Esta vista es de control y validación, no de detalle por guía.
         </div>
       `;
       return;
@@ -384,24 +468,31 @@
                 <td>${fmtText(g.remitente_nombre)}</td>
                 <td>${fmtText(g.destinatario_nombre)}</td>
                 <td>${fmtText(g.destinatario_direccion)}</td>
-                <td>${g.cant_bultos ?? 0}</td>
+                <td>${fmtNum(g.cant_bultos)}</td>
                 <td>${fmtText(g.estado_pago)}</td>
                 <td>${fmtText(g.estado_logistico)}</td>
               </tr>
             `
           )
           .join("")
-      : `<tr><td colspan="7" class="muted">No hay guías candidatas para este cierre.</td></tr>`;
+      : `<tr><td colspan="7" class="c-muted">No hay guías candidatas para este cierre.</td></tr>`;
 
     box.innerHTML = `
-      <div><b>Preview:</b> SUCURSAL</div>
-      <div class="muted small" style="margin-top:6px">Fecha: ${fmtText(p.fecha)}</div>
-      <div class="muted small" style="margin-top:2px">Universo: ${sucLabel}</div>
+      <div class="c-preview-head">
+        <div>
+          <div><b>Preview:</b> SUCURSAL</div>
+          <div class="c-small c-muted" style="margin-top:4px">Fecha: ${fmtText(p.fecha)}</div>
+          <div class="c-small c-muted">Universo: ${sucLabel}</div>
+        </div>
+        <div class="c-row">
+          ${pill(`Guías candidatas: ${guias.length}`, guias.length ? "ok" : "warn")}
+        </div>
+      </div>
 
       ${resumenHtml}
 
-      <div style="overflow:auto; max-height:420px; margin-top:12px; border:1px solid rgba(255,255,255,.08); border-radius:12px;">
-        <table>
+      <div class="c-table-box" style="margin-top:12px">
+        <table class="c-mini-table">
           <thead>
             <tr>
               <th>Guía</th>
@@ -419,7 +510,7 @@
 
       ${
         guias.length > 100
-          ? `<div class="muted small" style="margin-top:8px">Mostrando 100 guías de ${guias.length}.</div>`
+          ? `<div class="c-small c-muted" style="margin-top:8px">Mostrando 100 guías de ${guias.length}.</div>`
           : ""
       }
     `;
@@ -438,10 +529,10 @@
     const btnPreviewMi = $("btn_preview_mi");
     const btnPreviewGlobal = $("btn_preview_global");
 
-    if (btnPreviewMi) btnPreviewMi.disabled = !mySuc;
-    if (btnCerrarMi) btnCerrarMi.disabled = !mySuc || norm(cierreActual?.estado) === "CERRADO";
-    if (btnPreviewGlobal) btnPreviewGlobal.disabled = !owner;
-    if (btnCerrarGlobal) btnCerrarGlobal.disabled = !owner || !st.global_permitido;
+    if (btnPreviewMi) btnPreviewMi.disabled = state.loading || !mySuc;
+    if (btnCerrarMi) btnCerrarMi.disabled = state.loading || !mySuc || norm(cierreActual?.estado) === "CERRADO";
+    if (btnPreviewGlobal) btnPreviewGlobal.disabled = state.loading || !owner;
+    if (btnCerrarGlobal) btnCerrarGlobal.disabled = state.loading || !owner || !st.global_permitido;
   }
 
   async function doPreviewMiSucursal() {
@@ -488,6 +579,8 @@
 
   async function confirmCloseMiSucursal() {
     const fecha = state.fecha;
+    if (!confirm(`¿Cerrar mi sucursal para la fecha ${fecha}?`)) return;
+
     const r = await postCerrarDiario({
       scope_modo: "SUCURSAL",
       fecha,
@@ -501,6 +594,8 @@
 
   async function confirmCloseSucursalOwner(sucursalId) {
     const fecha = state.fecha;
+    if (!confirm(`¿Cerrar la sucursal ${sucursalId} para la fecha ${fecha}?`)) return;
+
     const r = await postCerrarDiario({
       scope_modo: "SUCURSAL",
       fecha,
@@ -515,6 +610,8 @@
 
   async function confirmCloseGlobal() {
     const fecha = state.fecha;
+    if (!confirm(`¿Ejecutar cierre GLOBAL para la fecha ${fecha}?`)) return;
+
     const r = await postCerrarDiario({
       scope_modo: "GLOBAL",
       fecha,
@@ -529,14 +626,36 @@
   async function reloadAll() {
     state.fecha = $("fecha")?.value || todayYMD();
     state.estado = await loadEstado(state.fecha);
+    renderKpis();
     renderTopEstado();
     renderTablaSucursales();
     renderButtons();
     renderPreview();
   }
 
+  async function runAction(fn) {
+    try {
+      clearFlash();
+      setBusy(true);
+      await fn();
+    } catch (err) {
+      console.error(err);
+      if (err?.status === 401) {
+        alert("Sesión vencida o no autenticada.");
+        goLogin();
+        return;
+      }
+      showFlash("bad", err?.data?.error || err.message || "Error");
+    } finally {
+      setBusy(false);
+      renderButtons();
+    }
+  }
+
   async function init() {
     state.me = await getMe();
+    if (!state.me) return;
+
     $("fecha").value = todayYMD();
     state.fecha = $("fecha").value;
 
@@ -544,58 +663,49 @@
       window.location.href = "/panel.html";
     });
 
-    if ($("previewBox")) {
-      $("previewBox").innerHTML = `<div class="muted">Sin preview cargado.</div>`;
-    }
+    $("fecha")?.addEventListener("change", async () => {
+      await runAction(async () => {
+        clearPreview();
+        await reloadAll();
+        showFlash("info", "Fecha operativa actualizada.");
+      });
+    });
 
     $("btn_refresh")?.addEventListener("click", async () => {
-      clearFlash();
-      clearPreview();
-      await reloadAll();
-      showFlash("info", "Estado de cierres actualizado.");
+      await runAction(async () => {
+        clearPreview();
+        await reloadAll();
+        showFlash("info", "Estado de cierres actualizado.");
+      });
     });
 
     $("btn_preview_mi")?.addEventListener("click", async () => {
-      try {
-        clearFlash();
-        await doPreviewMiSucursal();
-      } catch (e) {
-        showFlash("bad", (e?.data?.error) || e.message);
-      }
+      await runAction(doPreviewMiSucursal);
     });
 
     $("btn_cerrar_mi")?.addEventListener("click", async () => {
-      try {
-        clearFlash();
-        await confirmCloseMiSucursal();
-      } catch (e) {
-        showFlash("bad", (e?.data?.error) || e.message);
-      }
+      await runAction(confirmCloseMiSucursal);
     });
 
     $("btn_preview_global")?.addEventListener("click", async () => {
-      try {
-        clearFlash();
-        await doPreviewGlobal();
-      } catch (e) {
-        showFlash("bad", (e?.data?.error) || e.message);
-      }
+      await runAction(doPreviewGlobal);
     });
 
     $("btn_cerrar_global")?.addEventListener("click", async () => {
-      try {
-        clearFlash();
-        await confirmCloseGlobal();
-      } catch (e) {
-        showFlash("bad", (e?.data?.error) || e.message);
-      }
+      await runAction(confirmCloseGlobal);
     });
 
-    await reloadAll();
+    clearPreview();
+    await runAction(reloadAll);
   }
 
   init().catch((err) => {
     console.error(err);
+    if (err?.status === 401) {
+      alert("Sesión vencida o no autenticada.");
+      goLogin();
+      return;
+    }
     showFlash("bad", err?.data?.error || err.message || "Error");
   });
 })();

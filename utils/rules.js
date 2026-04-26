@@ -1,14 +1,31 @@
 // utils/rules.js
 
-// Flujo lineal (sin retrocesos ni saltos)
-const LOG_FLOW = ["RECIBIDO_ORIGEN", "EN_TRANSITO", "RECIBIDO_DESTINO", "ENTREGADO"];
+// Flujo logístico real del sistema EXR
+const LOG_FLOW = [
+  "RECIBIDO_ORIGEN",
+  "EN_TRANSITO_A_CENTRAL",
+  "RECIBIDO_CENTRAL",
+  "RECIBIDO_CENTRAL_OBSERVADO",
+  "EN_TRANSITO_A_DESTINO",
+  "RECIBIDO_DESTINO",
+  "RECIBIDO_DESTINO_OBSERVADO",
+  "ENTREGADO",
+];
+
+function normEstado(v) {
+  return String(v || "").trim().toUpperCase();
+}
+
+function normPago(v) {
+  return String(v || "").trim().toUpperCase();
+}
 
 function idxEstado(estado) {
-  return LOG_FLOW.indexOf(String(estado || "").trim().toUpperCase());
+  return LOG_FLOW.indexOf(normEstado(estado));
 }
 
 /**
- * Estados financieros válidos P15
+ * Estados financieros válidos
  */
 const PAGO_VALIDOS = new Set([
   "NO_APLICA",
@@ -19,27 +36,46 @@ const PAGO_VALIDOS = new Set([
   "OBSERVADO",
 ]);
 
-function normPago(v) {
-  return String(v || "").trim().toUpperCase();
+function isDestinoRecibido(estado) {
+  const e = normEstado(estado);
+  return e === "RECIBIDO_DESTINO" || e === "RECIBIDO_DESTINO_OBSERVADO";
+}
+
+function isCentralRecibido(estado) {
+  const e = normEstado(estado);
+  return e === "RECIBIDO_CENTRAL" || e === "RECIBIDO_CENTRAL_OBSERVADO";
 }
 
 /**
- * Reglas P15 (Estado logístico):
- * - Solo avanzar 1 paso (sin saltos)
- * - Prohibido retroceder SIEMPRE
- * - La validación fuerte de entrega con cobro destino
- *   se resuelve en routes/estadoGuia.js, no acá.
+ * Reglas de transición logística completas
+ *
+ * Permitidas:
+ * - RECIBIDO_ORIGEN -> EN_TRANSITO_A_CENTRAL
+ * - EN_TRANSITO_A_CENTRAL -> RECIBIDO_CENTRAL
+ * - EN_TRANSITO_A_CENTRAL -> RECIBIDO_CENTRAL_OBSERVADO
+ * - RECIBIDO_CENTRAL -> EN_TRANSITO_A_DESTINO
+ * - RECIBIDO_CENTRAL_OBSERVADO -> EN_TRANSITO_A_DESTINO
+ * - EN_TRANSITO_A_DESTINO -> RECIBIDO_DESTINO
+ * - EN_TRANSITO_A_DESTINO -> RECIBIDO_DESTINO_OBSERVADO
+ * - RECIBIDO_DESTINO -> RECIBIDO_DESTINO_OBSERVADO
+ * - RECIBIDO_DESTINO -> ENTREGADO
+ * - RECIBIDO_DESTINO_OBSERVADO -> ENTREGADO
+ *
+ * No permitidas:
+ * - retrocesos
+ * - saltos fuera del circuito
+ * - reabrir estados anteriores
  */
 function canChangeEstado({ fromEstado, toEstado, pagoEstado }) {
-  const a = idxEstado(fromEstado);
-  const b = idxEstado(toEstado);
+  const from = normEstado(fromEstado);
+  const to = normEstado(toEstado);
   const pago = normPago(pagoEstado);
 
-  if (a === -1 || b === -1) {
+  if (idxEstado(from) === -1 || idxEstado(to) === -1) {
     return { ok: false, error: "estado_logistico inválido" };
   }
 
-  if (a === b) {
+  if (from === to) {
     return { ok: false, error: "El estado ya es ese" };
   }
 
@@ -47,30 +83,71 @@ function canChangeEstado({ fromEstado, toEstado, pagoEstado }) {
     return { ok: false, error: "estado_pago inválido" };
   }
 
-  const diff = b - a;
-
-  // Solo permitir avanzar 1 paso
-  if (diff !== 1) {
-    return {
-      ok: false,
-      error: "Movimiento de estado no permitido (solo avance lineal, sin retrocesos ni saltos)",
-    };
+  // Origen -> tránsito a central
+  if (from === "RECIBIDO_ORIGEN" && to === "EN_TRANSITO_A_CENTRAL") {
+    return { ok: true };
   }
 
-  return { ok: true };
+  // Llegada a HUB
+  if (from === "EN_TRANSITO_A_CENTRAL" && to === "RECIBIDO_CENTRAL") {
+    return { ok: true };
+  }
+
+  if (from === "EN_TRANSITO_A_CENTRAL" && to === "RECIBIDO_CENTRAL_OBSERVADO") {
+    return { ok: true };
+  }
+
+  // HUB -> distribución
+  if (from === "RECIBIDO_CENTRAL" && to === "EN_TRANSITO_A_DESTINO") {
+    return { ok: true };
+  }
+
+  if (from === "RECIBIDO_CENTRAL_OBSERVADO" && to === "EN_TRANSITO_A_DESTINO") {
+    return { ok: true };
+  }
+
+  // Llegada a destino
+  if (from === "EN_TRANSITO_A_DESTINO" && to === "RECIBIDO_DESTINO") {
+    return { ok: true };
+  }
+
+  if (from === "EN_TRANSITO_A_DESTINO" && to === "RECIBIDO_DESTINO_OBSERVADO") {
+    return { ok: true };
+  }
+
+  // Observación detectada ya en destino
+  if (from === "RECIBIDO_DESTINO" && to === "RECIBIDO_DESTINO_OBSERVADO") {
+    return { ok: true };
+  }
+
+  // Entrega final
+  if (from === "RECIBIDO_DESTINO" && to === "ENTREGADO") {
+    return { ok: true };
+  }
+
+  if (from === "RECIBIDO_DESTINO_OBSERVADO" && to === "ENTREGADO") {
+    return { ok: true };
+  }
+
+  return {
+    ok: false,
+    error: "Movimiento de estado no permitido para el flujo logístico actual",
+  };
 }
 
 /**
- * Reglas P15 (Pago):
- * - Prohibido cambiar pago si la guía está ENTREGADA
- * - Solo permitir COBRADO_DESTINO / OBSERVADO cuando la guía está en RECIBIDO_DESTINO
- * - No permitir “no cambios”
- * - No permitir saltos absurdos
+ * Reglas de transición financiera
+ *
+ * - No cambiar pago si ya está ENTREGADA
+ * - Cobro destino / excepción permitidos solo cuando la guía está en destino
+ *   (normal u observada)
+ * - RENDIDO solo desde COBRADO_DESTINO
+ * - NO_APLICA no es transición manual
  */
 function canChangePago({ fromPago, toPago, estadoLogistico }) {
   const from = normPago(fromPago);
   const to = normPago(toPago);
-  const estado = String(estadoLogistico || "").trim().toUpperCase();
+  const estado = normEstado(estadoLogistico);
 
   if (!PAGO_VALIDOS.has(from) || !PAGO_VALIDOS.has(to)) {
     return { ok: false, error: "estado_pago inválido" };
@@ -81,18 +158,20 @@ function canChangePago({ fromPago, toPago, estadoLogistico }) {
   }
 
   if (estado === "ENTREGADO") {
-    return { ok: false, error: "No se puede cambiar el pago cuando la guía está ENTREGADA" };
-  }
-
-  // Cobro real en destino solo cuando la guía ya llegó a destino
-  if ((to === "COBRADO_DESTINO" || to === "OBSERVADO") && estado !== "RECIBIDO_DESTINO") {
     return {
       ok: false,
-      error: "Solo se puede registrar cobro destino o excepción cuando la guía está en RECIBIDO_DESTINO",
+      error: "No se puede cambiar el pago cuando la guía está ENTREGADA",
     };
   }
 
-  // Rendido solo después de cobrar destino
+  if ((to === "COBRADO_DESTINO" || to === "OBSERVADO") && !isDestinoRecibido(estado)) {
+    return {
+      ok: false,
+      error:
+        "Solo se puede registrar cobro destino o excepción cuando la guía está en RECIBIDO_DESTINO o RECIBIDO_DESTINO_OBSERVADO",
+    };
+  }
+
   if (to === "RENDIDO" && from !== "COBRADO_DESTINO") {
     return {
       ok: false,
@@ -100,7 +179,6 @@ function canChangePago({ fromPago, toPago, estadoLogistico }) {
     };
   }
 
-  // NO_APLICA no debería usarse como transición manual arbitraria
   if (to === "NO_APLICA") {
     return {
       ok: false,

@@ -3,9 +3,6 @@
 
   console.log("BANDEJA_V2 P17.2 CARGADA", new Date().toISOString());
 
-  /* =========================
-     HELPERS UI
-  ========================= */
   function esc(str) {
     return String(str ?? "")
       .replaceAll("&", "&amp;")
@@ -159,9 +156,6 @@
     return "";
   }
 
-  /* =========================
-     LOGOUT
-  ========================= */
   (function bindLogoutNuclear() {
     try {
       const ensureTypeButton = () => {
@@ -196,12 +190,8 @@
     }
   })();
 
-  /* =========================
-     CONSTANTES
-  ========================= */
   const LS_TOKEN = "exr_token";
   const LS_UI = "exr_bandeja_ui_v2";
-  const LS_ETAG = "exr_bandeja_etag";
 
   const ENDPOINTS = {
     authPing: "/test-auth",
@@ -214,9 +204,8 @@
 
   const TABS = [
     { key: "RECIBIDO_ORIGEN", label: "Pendientes origen" },
-    { key: "EN_TRANSITO_A_CENTRAL", label: "A central" },
+    { key: "EN_TRANSITO", label: "En tránsito" },
     { key: "RECIBIDO_CENTRAL", label: "En central" },
-    { key: "EN_TRANSITO_A_DESTINO", label: "A destino" },
     { key: "RECIBIDO_DESTINO", label: "En destino" },
     { key: "ENTREGADO", label: "Entregadas" },
     { key: "ALL", label: "Todas" },
@@ -231,19 +220,13 @@
   let debounceTimer = null;
   let refreshTimer = null;
   let currentUser = null;
-  let lastUpdatedAt = 0;
-  let lastEtag = localStorage.getItem(LS_ETAG) || "";
 
-  /* =========================
-     API
-  ========================= */
   function getToken() {
     return localStorage.getItem(LS_TOKEN) || "";
   }
 
   function logout() {
     localStorage.removeItem(LS_TOKEN);
-    localStorage.removeItem(LS_ETAG);
     location.href = "/operador.html";
   }
 
@@ -272,32 +255,6 @@
     return data;
   }
 
-  /* =========================
-     SYNC CHIP
-  ========================= */
-  function setSyncChip(mode, extra = "") {
-    const el = $("syncChip");
-    if (!el) return;
-
-    const now = Date.now();
-    const age = lastUpdatedAt ? Math.max(0, Math.round((now - lastUpdatedAt) / 1000)) : 0;
-
-    const base =
-      mode === "loading" ? "Actualizando…" :
-      mode === "ok" ? "Actualizado" :
-      mode === "same" ? "Sin cambios" : "Error";
-
-    el.textContent = `${base}${lastUpdatedAt ? ` • hace ${age}s` : ""}${extra ? ` • ${extra}` : ""}`;
-
-    el.classList.remove("ok", "same", "err");
-    if (mode === "ok") el.classList.add("ok");
-    if (mode === "same") el.classList.add("same");
-    if (mode === "err") el.classList.add("err");
-  }
-
-  /* =========================
-     UI STATE
-  ========================= */
   function readUI() {
     try {
       const raw = localStorage.getItem(LS_UI);
@@ -332,7 +289,6 @@
 
   function applyUI(state) {
     if (!state) return;
-
     if (state.activeTab) activeTab = state.activeTab;
     if (state.quick) quick = state.quick;
     if (typeof state.page === "number" && state.page >= 1) page = state.page;
@@ -345,9 +301,6 @@
     if ($("limitSel")) $("limitSel").value = String(limit);
   }
 
-  /* =========================
-     ROLES
-  ========================= */
   function roleUpper() {
     return String(currentUser?.rol || "").trim().toUpperCase();
   }
@@ -356,9 +309,6 @@
     return ["OWNER", "ADMIN"].includes(roleUpper());
   }
 
-  /* =========================
-     BADGES
-  ========================= */
   function badgeLog(estado) {
     const map = {
       RECIBIDO_ORIGEN: ["Recibido origen", "warn"],
@@ -398,233 +348,63 @@
     return `<span class="badge ${cls}">${esc(visible)}</span>${extra}`;
   }
 
-  /* =========================
-     OPERATIVA
-  ========================= */
-  function deriveOperativaLegacy(g) {
-    const estadoLog = normalizeUpper(g.estado_logistico);
-    const estadoPago = normalizeLower(g.estado_pago);
-
-    const condicionPago = normalizeUpper(g.condicion_pago);
-    const tipoCobro = normalizeUpper(g.tipo_cobro);
-
-    const esPagoDestino = condicionPago === "DESTINO" || tipoCobro === "DESTINO";
-    const esPagoOrigen = condicionPago === "ORIGEN" || tipoCobro === "ORIGEN";
-
-    const rendido =
-      g.rendido_bool === true ||
-      String(g.rendicion_estado || "").toUpperCase() === "RENDIDO" ||
-      !!g.rendido_at ||
-      estadoPago === "rendido";
-
-    const pendienteRendicion =
-      g.rendicion_pendiente === true ||
-      String(g.rendicion_estado || "").toUpperCase() === "PENDIENTE";
-
-    const cobroConfirmado =
-      rendido ||
-      estadoPago === "cobrado_destino" ||
-      estadoPago === "pagado" ||
-      estadoPago === "pagado_origen" ||
-      (esPagoOrigen && estadoPago === "no_aplica");
-
-    const tieneExcepcion = estadoPago === "observado";
-    const bloqueadoPorPagoOrigen = esPagoOrigen && estadoPago === "pendiente_origen";
-
-    const puedeDespachar =
-      estadoLog === "RECIBIDO_ORIGEN" &&
-      !bloqueadoPorPagoOrigen;
-
-    const puedeRecibirDestino =
-      estadoLog === "EN_TRANSITO" ||
-      estadoLog === "EN_TRANSITO_A_DESTINO";
-
-    const puedeCobrar =
-      estadoLog === "RECIBIDO_DESTINO" &&
-      esPagoDestino &&
-      estadoPago === "pendiente_destino";
-
-    const puedeEntregar =
-      (estadoLog === "RECIBIDO_DESTINO" || estadoLog === "RECIBIDO_DESTINO_OBSERVADO") &&
-      (
-        !esPagoDestino ||
-        cobroConfirmado ||
-        tieneExcepcion
-      );
-
-    const puedeRendir =
-      isOwnerOrAdminUser() &&
-      esPagoDestino &&
-      pendienteRendicion &&
-      !rendido;
-
-    const listaParaEntrega =
-      (estadoLog === "RECIBIDO_DESTINO" || estadoLog === "RECIBIDO_DESTINO_OBSERVADO") &&
-      puedeEntregar;
-
-    let estadoOperativo = "SIN_CLASIFICAR";
-
-    if (tieneExcepcion && (estadoLog === "RECIBIDO_DESTINO" || estadoLog === "RECIBIDO_DESTINO_OBSERVADO")) {
-      estadoOperativo = "EXCEPCION_AUTORIZADA";
-    } else if (estadoLog === "RECIBIDO_ORIGEN" && bloqueadoPorPagoOrigen) {
-      estadoOperativo = "PENDIENTE_PAGO_ORIGEN";
-    } else if (estadoLog === "RECIBIDO_ORIGEN") {
-      estadoOperativo = "PENDIENTE_DESPACHO";
-    } else if (estadoLog === "EN_TRANSITO" || estadoLog === "EN_TRANSITO_A_CENTRAL" || estadoLog === "EN_TRANSITO_A_DESTINO") {
-      estadoOperativo = "EN_VIAJE";
-    } else if (estadoLog === "RECIBIDO_CENTRAL") {
-      estadoOperativo = "EN_CENTRAL";
-    } else if (estadoLog === "RECIBIDO_CENTRAL_OBSERVADO") {
-      estadoOperativo = "CENTRAL_OBSERVADO";
-    } else if (estadoLog === "RECIBIDO_DESTINO" && puedeCobrar) {
-      estadoOperativo = "PENDIENTE_COBRO_DESTINO";
-    } else if (listaParaEntrega) {
-      estadoOperativo = "LISTA_PARA_ENTREGA";
-    } else if (estadoLog === "ENTREGADO") {
-      estadoOperativo = "ENTREGADA";
-    }
-
-    if (rendido) {
-      estadoOperativo = "RENDIDO";
-    } else if (pendienteRendicion) {
-      estadoOperativo = "PENDIENTE_RENDICION";
-    }
-
-    return {
-      source: "legacy",
-      estadoLog,
-      estadoPago,
-      condicionPago,
-      tipoCobro,
-      esPagoDestino,
-      esPagoOrigen,
-      cobroConfirmado,
-      tieneExcepcion,
-      bloqueadoPorPagoOrigen,
-      rendido,
-      pendienteRendicion,
-      puedeDespachar,
-      puedeRecibirDestino,
-      puedeCobrar,
-      puedeEntregar,
-      puedeRendir,
-      listaParaEntrega,
-      estadoOperativo,
-      situacionOperativa: estadoOperativo,
-      situacionContable: pendienteRendicion
-        ? "PENDIENTE_RENDICION"
-        : (rendido ? "RENDIDA_SIN_CIERRE" : "NO_APLICA"),
-      accionPrincipal:
-        puedeDespachar ? "DESPACHAR" :
-        puedeRecibirDestino ? "RECIBIR_DESTINO" :
-        puedeCobrar ? "REGISTRAR_COBRO" :
-        puedeRendir ? "RENDIR_COBRO" :
-        puedeEntregar ? "ENTREGAR" : "VER_DETALLE",
-      resumenCorto: "",
-      bloqueos: [],
-      alertas: [],
-      cierreEstado: "SIN_CIERRE",
-      liquidacionEstado: "NO_APLICA",
-      conciliacionEstado: "NO_APLICA"
-    };
-  }
-
   function deriveOperativa(g) {
     const der = getEstadoDerivado(g);
-    if (!der) return deriveOperativaLegacy(g);
-
     const estadoLog = normalizeUpper(g.estado_logistico);
     const estadoPago = normalizeLower(g.estado_pago);
     const condicionPago = normalizeUpper(g.condicion_pago);
     const tipoCobro = normalizeUpper(g.tipo_cobro);
 
-    const esPagoDestino = condicionPago === "DESTINO" || tipoCobro === "DESTINO";
-    const esPagoOrigen = condicionPago === "ORIGEN" || tipoCobro === "ORIGEN";
+    if (!der) {
+      return {
+        estadoLog,
+        estadoPago,
+        condicionPago,
+        tipoCobro,
+        situacionOperativa: "SIN_CLASIFICAR",
+        situacionContable: "NO_APLICA",
+        accionPrincipal: "VER_DETALLE",
+        resumenCorto: "",
+        bloqueos: [],
+        alertas: [],
+        cierreEstado: "SIN_CIERRE",
+        liquidacionEstado: "NO_APLICA",
+        conciliacionEstado: "NO_APLICA",
+        puedeCobrar: false,
+        puedeEntregar: false,
+        puedeRendir: false,
+      };
+    }
 
     const situacionOperativa = normalizeUpper(der.situacion_operativa);
     const situacionContable = normalizeUpper(der.situacion_contable);
     const accionPrincipal = normalizeUpper(der.accion_principal);
 
-    const bloqueos = Array.isArray(der.bloqueos) ? der.bloqueos : [];
-    const alertas = Array.isArray(der.alertas) ? der.alertas : [];
-
-    const tieneExcepcion =
-      hasCode(alertas, "EXCEPCION_ENTREGA") ||
-      estadoPago === "observado";
-
-    const bloqueadoPorPagoOrigen =
-      esPagoOrigen &&
-      estadoPago === "pendiente_origen";
-
-    const pendienteRendicion = situacionContable === "PENDIENTE_RENDICION";
-
-    const rendido =
-      !!g.rendido_at ||
-      estadoPago === "rendido" ||
-      [
-        "RENDIDA_SIN_CIERRE",
-        "LIQUIDABLE",
-        "EN_LIQUIDACION",
-        "APROBADA_PENDIENTE_REGISTRO",
-        "REGISTRADA_PENDIENTE_CONCILIACION",
-        "CONCILIADA"
-      ].includes(situacionContable);
-
-    const cobroConfirmado =
-      rendido ||
-      estadoPago === "cobrado_destino" ||
-      estadoPago === "pagado" ||
-      estadoPago === "pagado_origen" ||
-      situacionOperativa === "LISTA_PARA_ENTREGA" ||
-      situacionOperativa === "ENTREGADA" ||
-      (esPagoOrigen && estadoPago === "no_aplica");
-
-    const puedeDespachar = accionPrincipal === "DESPACHAR";
-    const puedeRecibirDestino = accionPrincipal === "RECIBIR_DESTINO";
-    const puedeCobrar = accionPrincipal === "REGISTRAR_COBRO";
-    const puedeEntregar = accionPrincipal === "ENTREGAR";
-    const puedeRendir = accionPrincipal === "RENDIR_COBRO";
-    const listaParaEntrega = situacionOperativa === "LISTA_PARA_ENTREGA";
-
     return {
-      source: "estado_derivado",
       estadoLog,
       estadoPago,
       condicionPago,
       tipoCobro,
-      esPagoDestino,
-      esPagoOrigen,
-      cobroConfirmado,
-      tieneExcepcion,
-      bloqueadoPorPagoOrigen,
-      rendido,
-      pendienteRendicion,
-      puedeDespachar,
-      puedeRecibirDestino,
-      puedeCobrar,
-      puedeEntregar,
-      puedeRendir,
-      listaParaEntrega,
-      estadoOperativo: situacionOperativa || "SIN_CLASIFICAR",
       situacionOperativa,
       situacionContable,
       accionPrincipal,
       resumenCorto: der.resumen_corto || "",
-      bloqueos,
-      alertas,
+      bloqueos: Array.isArray(der.bloqueos) ? der.bloqueos : [],
+      alertas: Array.isArray(der.alertas) ? der.alertas : [],
       cierreEstado: normalizeUpper(der.cierre_estado),
       liquidacionEstado: normalizeUpper(der.liquidacion_estado),
-      conciliacionEstado: normalizeUpper(der.conciliacion_estado)
+      conciliacionEstado: normalizeUpper(der.conciliacion_estado),
+      puedeCobrar: accionPrincipal === "REGISTRAR_COBRO",
+      puedeEntregar: accionPrincipal === "ENTREGAR",
+      puedeRendir: accionPrincipal === "RENDIR_COBRO",
     };
   }
 
   function canUseExcepcion(guia) {
     if (!isOwnerOrAdminUser()) return false;
-
     const op = deriveOperativa(guia);
     return (
-      op.esPagoDestino &&
-      (op.estadoLog === "RECIBIDO_DESTINO" || op.estadoLog === "RECIBIDO_DESTINO_OBSERVADO") &&
+      ["RECIBIDO_DESTINO", "RECIBIDO_DESTINO_OBSERVADO"].includes(op.estadoLog) &&
       op.estadoPago === "pendiente_destino"
     );
   }
@@ -634,8 +414,8 @@
     const out = [];
 
     out.push(badgeText(
-      operativaText(op.situacionOperativa || op.estadoOperativo),
-      operativaClass(op.situacionOperativa || op.estadoOperativo)
+      operativaText(op.situacionOperativa),
+      operativaClass(op.situacionOperativa)
     ));
 
     if (op.situacionContable && op.situacionContable !== "NO_APLICA") {
@@ -674,9 +454,6 @@
     return a > 0 ? a : b;
   }
 
-  /* =========================
-     MODAL RUNTIME
-  ========================= */
   function ensureRuntimeModal() {
     if ($("modalBack")) return;
 
@@ -724,7 +501,6 @@
     const back = $("modalBack");
     if (!back) return;
     back.style.display = "none";
-
     const body = $("modalBody");
     if (body) body.innerHTML = "";
   }
@@ -759,9 +535,6 @@
     };
   }
 
-  /* =========================
-     TABS / FILTERS
-  ========================= */
   function renderTabs() {
     const el = $("tabs");
     if (!el) return;
@@ -817,7 +590,6 @@
       if (!tipo_cobro) tipo_cobro = "DESTINO";
     } else if (quick === "OBSERVADO") {
       estado_pago = "observado";
-      if (!tipo_cobro) tipo_cobro = "DESTINO";
     } else if (quick === "PEND_ORIGEN") {
       estado_pago = "pendiente_origen";
       if (!tipo_cobro) tipo_cobro = "ORIGEN";
@@ -829,9 +601,6 @@
     return { estado_logistico, estado_pago, tipo_cobro, sin_metodo, rendicion };
   }
 
-  /* =========================
-     TABLE
-  ========================= */
   function routeLabel(g) {
     const o = g.sucursal_origen_codigo || g.sucursal_origen_nombre || ("S" + g.sucursal_origen_id);
     const d = g.sucursal_destino_codigo || g.sucursal_destino_nombre || ("S" + g.sucursal_destino_id);
@@ -843,7 +612,7 @@
   function rowIsBad(g) {
     const op = deriveOperativa(g);
     return (
-      ["PENDIENTE_COBRO_DESTINO", "OBSERVADA", "PENDIENTE_PAGO_ORIGEN"].includes(op.situacionOperativa || op.estadoOperativo) ||
+      ["PENDIENTE_COBRO_DESTINO", "OBSERVADA", "PENDIENTE_PAGO_ORIGEN"].includes(op.situacionOperativa) ||
       !!firstMsg(op.bloqueos)
     );
   }
@@ -853,23 +622,15 @@
     const btns = [];
 
     btns.push(`<button class="exr-pro-btn" data-act="detalle" data-id="${g.id}">Detalle</button>`);
-    btns.push(`<button class="exr-pro-btn" data-act="etiqueta_thermal" data-id="${g.id}">Etiqueta térmica</button>`);
-    btns.push(`<button class="exr-pro-btn" data-act="etiqueta_a4" data-id="${g.id}">Etiquetas A4</button>`);
-
-    if (op.puedeDespachar) {
-      btns.push(`<button class="exr-pro-btn ok" data-act="despachar" data-id="${g.id}">Despachar</button>`);
-    }
-
-    if (op.puedeRecibirDestino) {
-      btns.push(`<button class="exr-pro-btn ok" data-act="recibir_destino" data-id="${g.id}">Recibir destino</button>`);
-    }
+    btns.push(`<button class="exr-pro-btn" data-act="etiqueta_thermal" data-id="${g.id}">Térmica</button>`);
+    btns.push(`<button class="exr-pro-btn" data-act="etiqueta_a4" data-id="${g.id}">A4</button>`);
 
     if (op.puedeCobrar) {
-      btns.push(`<button class="exr-pro-btn ok" data-act="cobrar" data-id="${g.id}">Registrar cobro</button>`);
+      btns.push(`<button class="exr-pro-btn ok" data-act="cobrar" data-id="${g.id}">Cobrar</button>`);
     }
 
     if (op.puedeRendir) {
-      btns.push(`<button class="exr-pro-btn" data-act="rendir" data-id="${g.id}">Rendir manual</button>`);
+      btns.push(`<button class="exr-pro-btn" data-act="rendir" data-id="${g.id}">Rendir</button>`);
     }
 
     if (op.puedeEntregar) {
@@ -880,7 +641,7 @@
       btns.push(`<button class="exr-pro-btn" data-act="excepcion" data-id="${g.id}">Excepción</button>`);
     }
 
-    return `<div style="display:flex;gap:8px;flex-wrap:wrap">${btns.join("")}</div>`;
+return `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${btns.join("")}</div>`;
   }
 
   function renderPager() {
@@ -940,26 +701,6 @@
             ? `<div class="muted" style="font-size:12px">Cobrar destino: ${money(g.monto_cobrar_destino)}</div>`
             : ""
         }
-        ${
-          op.situacionContable && op.situacionContable !== "NO_APLICA"
-            ? `<div class="muted" style="font-size:12px">${esc(contableText(op.situacionContable))}</div>`
-            : ""
-        }
-        ${
-          op.cierreEstado && op.cierreEstado !== "SIN_CIERRE"
-            ? `<div class="muted" style="font-size:12px">Cierre: ${esc(op.cierreEstado)}</div>`
-            : ""
-        }
-        ${
-          op.liquidacionEstado && op.liquidacionEstado !== "NO_APLICA"
-            ? `<div class="muted" style="font-size:12px">Liquidación: ${esc(op.liquidacionEstado)}</div>`
-            : ""
-        }
-        ${
-          op.conciliacionEstado && op.conciliacionEstado !== "NO_APLICA"
-            ? `<div class="muted" style="font-size:12px">Conciliación: ${esc(op.conciliacionEstado)}</div>`
-            : ""
-        }
       `;
 
       const acciones = renderAcciones(g);
@@ -979,78 +720,6 @@
     writeUI(captureUI());
   }
 
-  /* =========================
-     CSV
-  ========================= */
-  function csvCell(v) {
-    const s = String(v ?? "");
-    const needs = /[;\n\r"]/g.test(s);
-    const escaped = s.replaceAll('"', '""');
-    return needs ? `"${escaped}"` : escaped;
-  }
-
-  function toCSV(rows) {
-    const cols = [
-      ["numero_guia", "N° Guía"],
-      ["created_at", "Fecha"],
-      ["sucursal_origen_codigo", "Origen"],
-      ["sucursal_destino_codigo", "Destino"],
-      ["sucursal_origen_nombre", "Origen (nombre)"],
-      ["sucursal_destino_nombre", "Destino (nombre)"],
-      ["remitente_nombre", "Remitente"],
-      ["remitente_telefono", "Tel Rem"],
-      ["destinatario_nombre", "Destinatario"],
-      ["destinatario_telefono", "Tel Dest"],
-      ["estado_logistico", "Estado Log"],
-      ["estado_pago", "Estado Pago"],
-      ["metodo_pago", "Método Pago"],
-      ["tipo_cobro", "Tipo Cobro"],
-      ["condicion_pago", "Condición Pago"],
-      ["monto_cobrar_destino", "Monto Cobrar Destino"],
-      ["monto_total", "Monto Total"],
-      ["rendido_at", "Rendido At"],
-      ["rendido_by_usuario", "Rendido Por"],
-    ];
-
-    const header = cols.map(c => csvCell(c[1])).join(";");
-    const lines = rows.map(r => cols.map(c => csvCell(r?.[c[0]])).join(";"));
-    return [header, ...lines].join("\n");
-  }
-
-  async function exportCSVAll() {
-    const q = ($("q")?.value || "").trim();
-    const f = buildServerFilters();
-
-    const url =
-      `${ENDPOINTS.bandeja}?export=1` +
-      `&q=${encodeURIComponent(q)}` +
-      `&estado_logistico=${encodeURIComponent(f.estado_logistico || "")}` +
-      `&estado_pago=${encodeURIComponent(f.estado_pago || "")}` +
-      `&tipo_cobro=${encodeURIComponent(f.tipo_cobro || "")}` +
-      `&sin_metodo=${encodeURIComponent(String(f.sin_metodo || 0))}` +
-      `&rendicion=${encodeURIComponent(f.rendicion || "")}`;
-
-    const data = await api(url);
-    const rows = Array.isArray(data) ? data : (data?.guias || []);
-
-    const csv = toCSV(rows);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-
-    const a = document.createElement("a");
-    const stamp = new Date().toISOString().slice(0, 19).replaceAll(":", "-");
-    a.href = URL.createObjectURL(blob);
-    a.download = `exr_bandeja_${stamp}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(a.href);
-
-    toast("Export listo", `Filas: ${rows.length}`, "ok");
-  }
-
-  /* =========================
-     OPERACIONES
-  ========================= */
   async function cambiarEstado(guia, nuevoEstado, textoOk) {
     await api(ENDPOINTS.estado, {
       method: "POST",
@@ -1246,9 +915,6 @@
     });
   }
 
-  /* =========================
-     EVENTS
-  ========================= */
   function bindTableActions() {
     const tbody = $("tbody");
     if (!tbody) return;
@@ -1271,7 +937,6 @@
           mode: "thermal"
         });
         if (total > 0) qs.set("n", String(total));
-
         window.open(`/etiqueta_batch.html?${qs.toString()}`, "_blank");
         return;
       }
@@ -1283,39 +948,12 @@
           mode: "a4"
         });
         if (total > 0) qs.set("n", String(total));
-
         window.open(`/etiqueta_batch.html?${qs.toString()}`, "_blank");
         return;
       }
 
       if (act === "detalle") {
         location.href = `/detalle.html?id=${encodeURIComponent(id)}`;
-        return;
-      }
-
-      if (act === "despachar") {
-        openConfirmModal({
-          title: `Despachar · ${guia.numero_guia || guia.id}`,
-          message: "La guía pasará a EN_TRANSITO.",
-          confirmText: "Despachar",
-          onConfirm: async ({ close }) => {
-            await cambiarEstado(guia, "EN_TRANSITO", "Guía despachada.");
-            close();
-          }
-        });
-        return;
-      }
-
-      if (act === "recibir_destino") {
-        openConfirmModal({
-          title: `Recibir en destino · ${guia.numero_guia || guia.id}`,
-          message: "La guía pasará a RECIBIDO_DESTINO.",
-          confirmText: "Recibir",
-          onConfirm: async ({ close }) => {
-            await cambiarEstado(guia, "RECIBIDO_DESTINO", "Guía recibida en destino.");
-            close();
-          }
-        });
         return;
       }
 
@@ -1358,6 +996,10 @@
       load();
     });
 
+    $("btnOperador")?.addEventListener("click", () => {
+  location.href = "/panel.html";
+});
+
     $("quickChips")?.addEventListener("click", (e) => {
       const btn = e.target.closest(".tab");
       if (!btn) return;
@@ -1378,10 +1020,6 @@
       load();
     });
 
-    $("btnExport")?.addEventListener("click", () => {
-      exportCSVAll().catch(e => toast("Error export", e.message, "bad"));
-    });
-
     ["f_estado_log", "f_estado_pago", "f_tipo_cobro"].forEach(id => {
       const el = $(id);
       if (!el) return;
@@ -1399,25 +1037,6 @@
         writeUI(captureUI());
         load();
       }, 350);
-    });
-
-    $("q")?.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        clearTimeout(debounceTimer);
-        page = 1;
-        writeUI(captureUI());
-        load();
-      }
-      if (e.key === "Escape") {
-        clearTimeout(debounceTimer);
-        e.target.value = "";
-        if ($("f_estado_log")) $("f_estado_log").value = "";
-        if ($("f_estado_pago")) $("f_estado_pago").value = "";
-        if ($("f_tipo_cobro")) $("f_tipo_cobro").value = "";
-        page = 1;
-        writeUI(captureUI());
-        load();
-      }
     });
 
     $("btnPrev")?.addEventListener("click", () => {
@@ -1444,19 +1063,9 @@
       load();
     });
 
-    document.addEventListener("keydown", (e) => {
-      if (e.key.toLowerCase() === "r") {
-        writeUI(captureUI());
-        load();
-      }
-    });
-
     bindTableActions();
   }
 
-  /* =========================
-     LOAD
-  ========================= */
   async function load() {
     try {
       const me = await api(ENDPOINTS.authPing);
@@ -1473,7 +1082,6 @@
 
     try {
       if ($("msg")) $("msg").textContent = "Cargando…";
-      setSyncChip("loading");
 
       const q = ($("q")?.value || "").trim();
       const offset = (page - 1) * limit;
@@ -1488,51 +1096,19 @@
         `&sin_metodo=${encodeURIComponent(String(f.sin_metodo || 0))}` +
         `&rendicion=${encodeURIComponent(f.rendicion || "")}`;
 
-      const token = getToken();
-      const headers = {};
-      if (token) headers["Authorization"] = "Bearer " + token;
-      if (lastEtag) headers["If-None-Match"] = String(lastEtag).replace(/"/g, "");
-
-      const r = await fetch(url, { headers });
-
-      if (r.status === 304) {
-        lastUpdatedAt = Date.now();
-        setSyncChip("same");
-        return;
-      }
-
-      if (!r.ok) {
-        const t = await r.text().catch(() => "");
-        throw new Error(t || ("HTTP " + r.status));
-      }
-
-      const data = await r.json();
-      const etag = r.headers.get("etag") || "";
-
-      if (etag) {
-        lastEtag = etag;
-        localStorage.setItem(LS_ETAG, etag);
-      }
-
+      const data = await api(url);
       all = Array.isArray(data) ? data : (data?.guias || []);
       apiTotal = Number(data?.total ?? all.length ?? 0);
-
-      lastUpdatedAt = Date.now();
-      setSyncChip("ok", `rows ${all.length}/${apiTotal}`);
 
       renderTabs();
       renderQuickChips();
       render();
     } catch (e) {
       if ($("msg")) $("msg").textContent = "Error: " + e.message;
-      setSyncChip("err", e.message);
       toast("Error", e.message, "bad");
     }
   }
 
-  /* =========================
-     AUTO REFRESH
-  ========================= */
   function startAutoRefresh() {
     if (refreshTimer) clearInterval(refreshTimer);
 
@@ -1547,9 +1123,6 @@
     }, 8000);
   }
 
-  /* =========================
-     BOOT
-  ========================= */
   function boot() {
     renderTabs();
     renderQuickChips();

@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Torre de Control de Novedades</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --bg-soft: #111827;
+      --card: #ffffff;
+      --line: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --ok: #059669;
+      --info: #2563eb;
+      --chip: #f3f4f6;
+      --shadow: 0 10px 30px rgba(0,0,0,.08);
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Arial, Helvetica, sans-serif;
+      background: #f3f4f6;
+      color: var(--text);
+    }
+
+    .topbar {
+      background: linear-gradient(135deg, #0f172a, #111827 70%, #1f2937);
+      color: white;
+      padding: 24px 20px 18px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      box-shadow: 0 6px 24px rgba(0,0,0,.20);
+    }
+
+    .topbar h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -.02em;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(140px, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .toolbar .field,
+    .toolbar .field-inline {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .toolbar label {
+      font-size: 12px;
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+
+    .toolbar input,
+    .toolbar select,
+    .toolbar button {
+      width: 100%;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color: white;
+      border-radius: 12px;
+      padding: 10px 12px;
+      outline: none;
+      font-size: 14px;
+    }
+
+    .toolbar button {
+      cursor: pointer;
+      font-weight: 700;
+      background: rgba(37, 99, 235, .95);
+      border-color: rgba(37, 99, 235, .95);
+    }
+
+    .toolbar button.secondary {
+      background: rgba(255,255,255,.08);
+      border-color: rgba(255,255,255,.12);
+    }
+
+    .toolbar .field-inline {
+      justify-content: flex-end;
+    }
+
+    .toolbar .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-top: 26px;
+      color: #e5e7eb;
+      font-size: 14px;
+    }
+
+    .toolbar .check-row input {
+      width: auto;
+    }
+
+    .page {
+      padding: 18px 20px 40px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .status-badge {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(150px, 1fr));
+      gap: 12px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .kpi {
+      padding: 16px;
+    }
+
+    .kpi .label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .kpi .value {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -.02em;
+    }
+
+    .section {
+      padding: 16px;
+    }
+
+    .section h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      letter-spacing: -.01em;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+    }
+
+    thead th {
+      text-align: left;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: #4b5563;
+      background: #f9fafb;
+      border-bottom: 1px solid var(--line);
+      padding: 12px 10px;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      white-space: nowrap;
+    }
+
+    tbody td {
+      padding: 11px 10px;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    tbody tr:hover {
+      background: #f8fafc;
+    }
+
+    .small {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--chip);
+      border: 1px solid #e5e7eb;
+      color: #111827;
+      white-space: nowrap;
+    }
+
+    .prio-CRITICA { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .prio-ALTA { background: #ffedd5; color: #9a3412; border-color: #fed7aa; }
+    .prio-MEDIA { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+    .prio-BAJA { background: #e5e7eb; color: #374151; border-color: #d1d5db; }
+
+    .sem-ROJO { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .sem-AMARILLO { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+    .sem-VERDE { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+
+    .btn-link {
+      padding: 8px 12px;
+      border: 1px solid #dbeafe;
+      background: #eff6ff;
+      color: #1d4ed8;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .empty {
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 2fr 1.1fr;
+      gap: 18px;
+    }
+
+    .error-box {
+      display: none;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      font-size: 14px;
+    }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, .55);
+      z-index: 50;
+      padding: 24px;
+      overflow: auto;
+    }
+
+    .modal {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 30px 80px rgba(0,0,0,.25);
+      overflow: hidden;
+    }
+
+    .modal-head {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .modal-title {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .modal-title h3 {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    .modal-body {
+      padding: 20px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(140px, 1fr));
+      gap: 12px;
+    }
+
+    .detail-item {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: #fafafa;
+    }
+
+    .detail-item .k {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-bottom: 6px;
+    }
+
+    .detail-item .v {
+      font-size: 14px;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+    }
+
+    .timeline-item {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: white;
+    }
+
+    .timeline-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .timeline-event {
+      font-weight: 800;
+    }
+
+    .timeline-meta {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .close-btn {
+      background: #111827;
+      color: white;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 12px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    @media (max-width: 1200px) {
+      .toolbar { grid-template-columns: repeat(4, minmax(140px, 1fr)); }
+      .kpis { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
+      .grid-2 { grid-template-columns: 1fr; }
+      .detail-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+    }
+
+    @media (max-width: 768px) {
+      .toolbar { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+      .kpis { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+      .detail-grid { grid-template-columns: 1fr; }
+      .topbar h1 { font-size: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Torre de Control de Novedades</h1>
+    <div class="subtitle">Guías despachadas con intervención requerida desde central</div>
+
+    <div class="toolbar">
+      <div class="field">
+        <label for="fAgencia">Agencia</label>
+        <select id="fAgencia">
+          <option value="">Todas</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="fPrioridad">Prioridad</label>
+        <select id="fPrioridad">
+          <option value="">Todas</option>
+          <option value="CRITICA">Crítica</option>
+          <option value="ALTA">Alta</option>
+          <option value="MEDIA">Media</option>
+          <option value="BAJA">Baja</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="fAccion">Acción recomendada</label>
+        <select id="fAccion">
+          <option value="">Todas</option>
+          <option value="COORDINAR_RETIRO">Coordinar retiro</option>
+          <option value="COORDINAR_COLECTA">Coordinar colecta</option>
+          <option value="COORDINAR_PASE">Coordinar pase</option>
+          <option value="CONTACTAR_AGENCIA">Contactar agencia</option>
+          <option value="REVISAR_NOVEDAD">Revisar novedad</option>
+          <option value="ESCALAR_CENTRAL">Escalar central</option>
+          <option value="SEGUIMIENTO">Seguimiento</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="fSinMovimiento">Sin movimiento desde (hs)</label>
+        <select id="fSinMovimiento">
+          <option value="">Cualquiera</option>
+          <option value="6">6 horas</option>
+          <option value="12">12 horas</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="fFechaDesde">Fecha desde</label>
+        <input type="date" id="fFechaDesde" />
+      </div>
+
+      <div class="field">
+        <label for="fFechaHasta">Fecha hasta</label>
+        <input type="date" id="fFechaHasta" />
+      </div>
+
+      <div class="field-inline">
+        <label>&nbsp;</label>
+        <button id="btnRefresh">Actualizar ahora</button>
+      </div>
+
+      <div class="field-inline">
+        <label>&nbsp;</label>
+        <button id="btnLimpiar" class="secondary">Limpiar filtros</button>
+      </div>
+
+      <div class="field-inline">
+        <div class="check-row">
+          <input type="checkbox" id="fSoloCriticas" />
+          <label for="fSoloCriticas">Solo críticas</label>
+        </div>
+      </div>
+
+      <div class="field-inline">
+        <div class="check-row">
+          <input type="checkbox" id="fAuto" checked />
+          <label for="fAuto">Autoactualizar</label>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="status-row">
+      <div class="status-badge" id="statusText">Inicializando…</div>
+      <div class="status-badge" id="statusUpdated">Última actualización: —</div>
+    </div>
+
+    <div id="errorBox" class="error-box"></div>
+
+    <section class="kpis">
+      <div class="card kpi">
+        <div class="label">Novedades activas</div>
+        <div class="value" id="kpiNovedades">0</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Pendientes retiro/colecta</div>
+        <div class="value" id="kpiRetiro">0</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Sin movimiento +6h</div>
+        <div class="value" id="kpi6h">0</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Sin movimiento +12h</div>
+        <div class="value" id="kpi12h">0</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Agencias con alerta</div>
+        <div class="value" id="kpiAgencias">0</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Lotes afectados</div>
+        <div class="value" id="kpiLotes">0</div>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <section class="card section">
+        <h2>Guías despachadas con acción requerida</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+       <tr>
+            <th>Prioridad</th>
+            <th>Agencia actual</th>
+            <th>Número guía</th>
+            <th>Ruta</th>
+            <th>Estado logístico</th>
+            <th>Última novedad</th>
+            <th>Hace</th>
+            <th>Acción</th>
+       </tr>
+            </thead>
+            <tbody id="tbodyGuias">
+    <tr><td colspan="8" class="empty">Cargando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card section">
+        <h2>Resumen por agencia</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Agencia</th>
+                <th>Novedades</th>
+                <th>Retiro/Colecta</th>
+                <th>+6h</th>
+                <th>+12h</th>
+                <th>Lotes</th>
+                <th>Último movimiento</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyAgencias">
+              <tr><td colspan="8" class="empty">Cargando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">
+          <h3 id="modalTitle">Detalle guía</h3>
+          <div class="small" id="modalSub">—</div>
+        </div>
+        <button class="close-btn" id="btnCloseModal">Cerrar</button>
+      </div>
+      <div class="modal-body">
+        <section>
+          <h2>Cabecera</h2>
+          <div class="detail-grid" id="detailCabecera"></div>
+        </section>
+
+        <section>
+          <h2>Bloque operativo</h2>
+          <div class="detail-grid" id="detailOperativo"></div>
+        </section>
+
+        <section>
+          <h2>Alertas y bloqueos</h2>
+          <div class="chips" id="detailAlertas"></div>
+        </section>
+
+        <section>
+          <h2>Timeline</h2>
+          <div class="timeline" id="detailTimeline"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="/interno/torre_control.js"></script>
+</body>
+</html>

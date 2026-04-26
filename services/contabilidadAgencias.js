@@ -1,5 +1,3 @@
-// services/contabilidadAgencias.js
-
 function toNum(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -74,48 +72,98 @@ async function getReglasVigentes(db, { sucursalId, fecha, rolOperacion }) {
   return rows;
 }
 
+/**
+ * Base comisionable:
+ * - usar MONTO_ENVIO como base principal
+ * - IVA para EXR
+ * - seguro para EXR
+ * - extras administrativos no operativos fuera
+ *
+ * Entrega a domicilio:
+ * - si la regla es ENTREGA_DOMICILIO => 70% agencia / 30% EXR
+ *   (o sea la agencia comisiona solo el 70% del valor de ese concepto)
+ */
 function calcularImporteRegla(regla, { guia, cobro }) {
   const modalidad = normUpper(regla.modalidad);
   const baseCalculo = normUpper(regla.base_calculo);
+  const concepto = normUpper(regla.concepto);
   const valor = toNum(regla.valor);
 
+  // FIJO
   if (modalidad === "FIJO" || baseCalculo === "FIJO") {
-    return round2(valor);
+    let importe = round2(valor);
+
+    if (concepto === "ENTREGA_DOMICILIO") {
+      importe = round2(importe * 0.7);
+    }
+
+    return importe;
   }
 
+  // PORCENTAJE
   let base = 0;
 
   switch (baseCalculo) {
     case "MONTO_ENVIO":
       base = toNum(guia.monto_envio);
       break;
+
     case "MONTO_TOTAL":
+      // compatibilidad: si alguna regla vieja usa MONTO_TOTAL, la mantenemos,
+      // aunque la regla recomendada sea liquidar sobre MONTO_ENVIO
       base = toNum(guia.monto_total);
       break;
+
     case "MONTO_COBRADO":
       base = toNum(cobro.monto);
       break;
+
     default:
       base = 0;
       break;
   }
 
-  return round2((base * valor) / 100);
+  let importe = round2((base * valor) / 100);
+
+  // Entrega domicilio: 70% para agencia / 30% EXR
+  if (concepto === "ENTREGA_DOMICILIO") {
+    importe = round2(importe * 0.7);
+  }
+
+  return importe;
 }
 
-function debeAplicarRegla(regla, { guia, cobro }) {
+/**
+ * Compatibilidad + nueva política:
+ * - COMISION_COBRANZA no aplica más
+ * - COMISION_ORIGEN puede generarse incluso cuando el cobro es destino
+ *   si el bloque que la invoca ya decidió que corresponde
+ * - COMISION_DESTINO aplica solo en cobro destino
+ */
+function debeAplicarRegla(regla, { guia, cobro, forzarConcepto = null }) {
   const concepto = normUpper(regla.concepto);
   const tipoCobro = normLower(cobro.tipo_cobro);
 
-  if (concepto === "COMISION_ORIGEN" && tipoCobro !== "origen") return false;
+  // Desactivar plus por cobranza
+  if (concepto === "COMISION_COBRANZA") return false;
+
+  // Si estamos forzando un concepto exacto, solo dejamos pasar ese
+  if (forzarConcepto && concepto !== normUpper(forzarConcepto)) {
+    return false;
+  }
+
+  // Regla histórica:
+  // COMISION_DESTINO solo cuando el cobro fue destino
   if (concepto === "COMISION_DESTINO" && tipoCobro !== "destino") return false;
-  if (concepto === "COMISION_COBRANZA" && tipoCobro !== "destino") return false;
+
+  // IMPORTANTE:
+  // COMISION_ORIGEN ya NO depende de que el tipo_cobro sea origen.
+  // Se puede aplicar en cobro destino si la invocación la busca para la sucursal origen.
 
   if (concepto === "ENTREGA_DOMICILIO" && !toBool(guia.entrega_domicilio)) {
     return false;
   }
 
-  // Si más adelante agregás retiro a la guía, acá lo activás.
   if (concepto === "RETIRO") {
     const tieneRetiro =
       toBool(guia.retiro_domicilio) ||
@@ -245,6 +293,90 @@ async function getCobroConGuia(db, guiaCobroId) {
   return rows[0] || null;
 }
 
+/**
+ * Aplica reglas para una sucursal/rol y un subconjunto opcional de conceptos.
+ */
+async function aplicarReglasSucursal(db, {
+  sucursal,
+  guia,
+  cobro,
+  fechaOperativa,
+  rolOperacion,
+  usuarioId,
+  conceptosPermitidos = null,
+  refPrefix = "",
+  descripcionPrefix = "",
+}) {
+  const reglas = await getReglasVigentes(db, {
+    sucursalId: sucursal.id,
+    fecha: fechaOperativa,
+    rolOperacion,
+  });
+
+  const movimientos = [];
+
+  for (const regla of reglas) {
+    const concepto = normUpper(regla.concepto);
+
+    if (Array.isArray(conceptosPermitidos) && conceptosPermitidos.length) {
+      if (!conceptosPermitidos.map(normUpper).includes(concepto)) {
+        continue;
+      }
+    }
+
+    if (!debeAplicarRegla(regla, { guia, cobro, forzarConcepto: concepto })) {
+      continue;
+    }
+
+    const importe = calcularImporteRegla(regla, { guia, cobro });
+    if (!(importe > 0)) continue;
+
+    const mov = await crearMovimientoCtaCte(db, {
+      sucursal_id: sucursal.id,
+      fecha_operativa: fechaOperativa,
+      fecha_contable: fechaOperativa,
+      ref_uid: `${refPrefix}REGLA:${regla.id}:COBRO:${cobro.id}:${concepto}`,
+      sentido: "CREDITO_AGENCIA",
+      concepto,
+      origen_tipo: "GUIA_COBRO",
+      origen_id: cobro.id,
+      guia_id: cobro.guia_id,
+      guia_cobro_id: cobro.id,
+      importe,
+      moneda: regla.moneda || cobro.moneda || "ARS",
+      estado: "PENDIENTE",
+      descripcion: `${descripcionPrefix}${regla.concepto} guía ${cobro.numero_guia}`,
+      meta: {
+        origen: "generarMovimientosPorCobro",
+        regla_id: regla.id,
+        sucursal_id: sucursal.id,
+        sucursal_nombre: sucursal.nombre,
+        rol_operacion: rolOperacion,
+        tipo_cobro: cobro.tipo_cobro,
+        medio_pago: cobro.medio_pago,
+        numero_guia: cobro.numero_guia,
+        modalidad: regla.modalidad,
+        base_calculo: regla.base_calculo,
+        valor_regla: regla.valor,
+      },
+      generado_automaticamente: true,
+      created_by_user_id: usuarioId,
+    });
+
+    movimientos.push({
+      kind: "regla",
+      regla_id: regla.id,
+      concepto: regla.concepto,
+      created: mov.created,
+      row: mov.row,
+      sucursal_id: sucursal.id,
+      rol_operacion: rolOperacion,
+    });
+  }
+
+  return movimientos;
+}
+
 async function generarMovimientosPorCobro(db, guiaCobroId) {
   const cobro = await getCobroConGuia(db, guiaCobroId);
   if (!cobro) {
@@ -270,8 +402,8 @@ async function generarMovimientosPorCobro(db, guiaCobroId) {
     };
   }
 
-  const sucursalId = Number(cobro.sucursal_id || 0);
-  if (!sucursalId) {
+  const sucursalCobradoraId = Number(cobro.sucursal_id || 0);
+  if (!sucursalCobradoraId) {
     return {
       ok: true,
       skipped: true,
@@ -280,17 +412,17 @@ async function generarMovimientosPorCobro(db, guiaCobroId) {
     };
   }
 
-  const sucursal = await getSucursalContableConfig(db, sucursalId);
-  if (!sucursal) {
+  const sucursalCobradora = await getSucursalContableConfig(db, sucursalCobradoraId);
+  if (!sucursalCobradora) {
     return {
       ok: true,
       skipped: true,
-      reason: `Sucursal ${sucursalId} inexistente`,
+      reason: `Sucursal ${sucursalCobradoraId} inexistente`,
       movimientos: [],
     };
   }
 
-  if (normUpper(sucursal.tipo_sucursal) !== "AGENCIA") {
+  if (normUpper(sucursalCobradora.tipo_sucursal) !== "AGENCIA") {
     return {
       ok: true,
       skipped: true,
@@ -299,7 +431,7 @@ async function generarMovimientosPorCobro(db, guiaCobroId) {
     };
   }
 
-  if (!toBool(sucursal.liquida_con_exr) || !toBool(sucursal.activa_liquidacion)) {
+  if (!toBool(sucursalCobradora.liquida_con_exr) || !toBool(sucursalCobradora.activa_liquidacion)) {
     return {
       ok: true,
       skipped: true,
@@ -321,12 +453,12 @@ async function generarMovimientosPorCobro(db, guiaCobroId) {
 
   const movimientos = [];
 
-  // 1) Recaudación real del cobro
+  // 1) Recaudación real del cobro, siempre sobre la sucursal que cobró
   const conceptoRecaudacion =
     tipoCobro === "origen" ? "RECAUDACION_ORIGEN" : "RECAUDACION_DESTINO";
 
   const recaudacion = await crearMovimientoCtaCte(db, {
-    sucursal_id: sucursalId,
+    sucursal_id: sucursalCobradoraId,
     fecha_operativa: fechaOperativa,
     fecha_contable: fechaOperativa,
     ref_uid: `COBRO:${cobro.id}:${conceptoRecaudacion}`,
@@ -354,73 +486,169 @@ async function generarMovimientosPorCobro(db, guiaCobroId) {
     kind: "recaudacion",
     created: recaudacion.created,
     row: recaudacion.row,
+    sucursal_id: sucursalCobradoraId,
   });
 
-  // 2) Reglas / comisiones de la sucursal que cobró
-  const rolOperacion = tipoCobro === "origen" ? "ORIGEN" : "DESTINO";
-  const reglas = await getReglasVigentes(db, {
-    sucursalId,
-    fecha: fechaOperativa,
-    rolOperacion,
-  });
+  // 2) Comisión para la sucursal que cobró / operó el destino
+  // Sin plus de cobranza.
+  {
+    const reglasDestino = await getReglasVigentes(db, {
+      sucursalId: sucursalCobradoraId,
+      fecha: fechaOperativa,
+      rolOperacion: tipoCobro === "destino" ? "DESTINO" : "ORIGEN",
+    });
 
-  for (const regla of reglas) {
-    if (!debeAplicarRegla(regla, { guia, cobro })) {
-      continue;
-    }
+    for (const regla of reglasDestino) {
+      const concepto = normUpper(regla.concepto);
 
-    const importe = calcularImporteRegla(regla, { guia, cobro });
-    if (!(importe > 0)) {
-      continue;
-    }
+      // Desactivar plus cobranza
+      if (concepto === "COMISION_COBRANZA") continue;
 
-    const mov = await crearMovimientoCtaCte(db, {
-      sucursal_id: sucursalId,
-      fecha_operativa: fechaOperativa,
-      fecha_contable: fechaOperativa,
-      ref_uid: `REGLA:${regla.id}:COBRO:${cobro.id}:${normUpper(regla.concepto)}`,
-      sentido: "CREDITO_AGENCIA",
-      concepto: normUpper(regla.concepto),
-      origen_tipo: "GUIA_COBRO",
-      origen_id: cobro.id,
-      guia_id: cobro.guia_id,
-      guia_cobro_id: cobro.id,
-      importe,
-      moneda: regla.moneda || cobro.moneda || "ARS",
-      estado: "PENDIENTE",
-      descripcion: `${regla.concepto} guía ${cobro.numero_guia}`,
-      meta: {
-        origen: "generarMovimientosPorCobro",
+      // En cobro destino: solo comisión destino + entrega domicilio + retiro si existiera
+      if (tipoCobro === "destino") {
+        if (!["COMISION_DESTINO", "ENTREGA_DOMICILIO", "RETIRO"].includes(concepto)) {
+          continue;
+        }
+      }
+
+      // En cobro origen: solo comisión origen + entrega domicilio + retiro si existiera
+      if (tipoCobro === "origen") {
+        if (!["COMISION_ORIGEN", "ENTREGA_DOMICILIO", "RETIRO"].includes(concepto)) {
+          continue;
+        }
+      }
+
+      if (!debeAplicarRegla(regla, { guia, cobro })) continue;
+
+      const importe = calcularImporteRegla(regla, { guia, cobro });
+      if (!(importe > 0)) continue;
+
+      const mov = await crearMovimientoCtaCte(db, {
+        sucursal_id: sucursalCobradoraId,
+        fecha_operativa: fechaOperativa,
+        fecha_contable: fechaOperativa,
+        ref_uid: `REGLA:${regla.id}:COBRO:${cobro.id}:${concepto}`,
+        sentido: "CREDITO_AGENCIA",
+        concepto,
+        origen_tipo: "GUIA_COBRO",
+        origen_id: cobro.id,
+        guia_id: cobro.guia_id,
+        guia_cobro_id: cobro.id,
+        importe,
+        moneda: regla.moneda || cobro.moneda || "ARS",
+        estado: "PENDIENTE",
+        descripcion: `${regla.concepto} guía ${cobro.numero_guia}`,
+        meta: {
+          origen: "generarMovimientosPorCobro",
+          regla_id: regla.id,
+          tipo_cobro: tipoCobro,
+          medio_pago: cobro.medio_pago,
+          numero_guia: cobro.numero_guia,
+          modalidad: regla.modalidad,
+          base_calculo: regla.base_calculo,
+          valor_regla: regla.valor,
+        },
+        generado_automaticamente: true,
+        created_by_user_id: cobro.usuario_id,
+      });
+
+      movimientos.push({
+        kind: "regla",
         regla_id: regla.id,
-        tipo_cobro: tipoCobro,
-        medio_pago: cobro.medio_pago,
-        numero_guia: cobro.numero_guia,
-        modalidad: regla.modalidad,
-        base_calculo: regla.base_calculo,
-        valor_regla: regla.valor,
-      },
-      generado_automaticamente: true,
-      created_by_user_id: cobro.usuario_id,
-    });
+        concepto: regla.concepto,
+        created: mov.created,
+        row: mov.row,
+        sucursal_id: sucursalCobradoraId,
+      });
+    }
+  }
 
-    movimientos.push({
-      kind: "regla",
-      regla_id: regla.id,
-      concepto: regla.concepto,
-      created: mov.created,
-      row: mov.row,
-    });
+  // 3) Si el cobro fue DESTINO, también generar comisión ORIGEN para la agencia de origen
+  if (tipoCobro === "destino") {
+    const sucursalOrigenId = Number(cobro.sucursal_origen_id || 0);
+
+    if (sucursalOrigenId && sucursalOrigenId !== sucursalCobradoraId) {
+      const sucursalOrigen = await getSucursalContableConfig(db, sucursalOrigenId);
+
+      if (
+        sucursalOrigen &&
+        normUpper(sucursalOrigen.tipo_sucursal) === "AGENCIA" &&
+        toBool(sucursalOrigen.liquida_con_exr) &&
+        toBool(sucursalOrigen.activa_liquidacion)
+      ) {
+        const reglasOrigen = await getReglasVigentes(db, {
+          sucursalId: sucursalOrigenId,
+          fecha: fechaOperativa,
+          rolOperacion: "ORIGEN",
+        });
+
+        for (const regla of reglasOrigen) {
+          const concepto = normUpper(regla.concepto);
+
+          // Solo comisión origen para la agencia de origen
+          if (concepto !== "COMISION_ORIGEN") continue;
+
+          if (!debeAplicarRegla(regla, { guia, cobro, forzarConcepto: "COMISION_ORIGEN" })) {
+            continue;
+          }
+
+          const importe = calcularImporteRegla(regla, { guia, cobro });
+          if (!(importe > 0)) continue;
+
+          const mov = await crearMovimientoCtaCte(db, {
+            sucursal_id: sucursalOrigenId,
+            fecha_operativa: fechaOperativa,
+            fecha_contable: fechaOperativa,
+            ref_uid: `ORIGEN:REGLA:${regla.id}:COBRO:${cobro.id}:COMISION_ORIGEN`,
+            sentido: "CREDITO_AGENCIA",
+            concepto: "COMISION_ORIGEN",
+            origen_tipo: "GUIA_COBRO",
+            origen_id: cobro.id,
+            guia_id: cobro.guia_id,
+            guia_cobro_id: cobro.id,
+            importe,
+            moneda: regla.moneda || cobro.moneda || "ARS",
+            estado: "PENDIENTE",
+            descripcion: `COMISION_ORIGEN guía ${cobro.numero_guia}`,
+            meta: {
+              origen: "generarMovimientosPorCobro",
+              regla_id: regla.id,
+              sucursal_id: sucursalOrigenId,
+              sucursal_nombre: sucursalOrigen.nombre,
+              rol_operacion: "ORIGEN",
+              tipo_cobro: tipoCobro,
+              medio_pago: cobro.medio_pago,
+              numero_guia: cobro.numero_guia,
+              modalidad: regla.modalidad,
+              base_calculo: regla.base_calculo,
+              valor_regla: regla.valor,
+            },
+            generado_automaticamente: true,
+            created_by_user_id: cobro.usuario_id,
+          });
+
+          movimientos.push({
+            kind: "regla",
+            regla_id: regla.id,
+            concepto: "COMISION_ORIGEN",
+            created: mov.created,
+            row: mov.row,
+            sucursal_id: sucursalOrigenId,
+          });
+        }
+      }
+    }
   }
 
   return {
     ok: true,
     skipped: false,
     sucursal: {
-      id: sucursal.id,
-      nombre: sucursal.nombre,
-      tipo_sucursal: sucursal.tipo_sucursal,
-      liquida_con_exr: sucursal.liquida_con_exr,
-      activa_liquidacion: sucursal.activa_liquidacion,
+      id: sucursalCobradora.id,
+      nombre: sucursalCobradora.nombre,
+      tipo_sucursal: sucursalCobradora.tipo_sucursal,
+      liquida_con_exr: sucursalCobradora.liquida_con_exr,
+      activa_liquidacion: sucursalCobradora.activa_liquidacion,
     },
     cobro: {
       id: cobro.id,

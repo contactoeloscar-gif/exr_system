@@ -80,15 +80,20 @@ function expectedEstadoGuiaDespacho(tipoLote) {
     : "EN_TRANSITO_A_CENTRAL";
 }
 
-function expectedEstadoGuiaRecepcionObservada(tipoLote) {
+function expectedEstadoGuiaRecepcionOK(tipoLote) {
   return String(tipoLote || "").trim().toUpperCase() === "DISTRIBUCION"
-    ? "RECIBIDO_DESTINO_OBSERVADO"
+    ? "RECIBIDO_DESTINO"
     : "RECIBIDO_CENTRAL";
 }
+
 function expectedEstadoGuiaRecepcionObservada(tipoLote) {
   return String(tipoLote || "").trim().toUpperCase() === "DISTRIBUCION"
     ? "RECIBIDO_DESTINO_OBSERVADO"
     : "RECIBIDO_CENTRAL_OBSERVADO";
+}
+
+function isRecepcionHub(tipoLote) {
+  return String(tipoLote || "").trim().toUpperCase() === "COLECTA";
 }
 
 function isEstadoLoteRecibido(estado) {
@@ -788,7 +793,7 @@ router.get("/:id/guias-disponibles", async (req, res) => {
       params.push(lote.sucursal_destino_id);
       whereExtra += ` AND g.sucursal_destino_id = $${params.length} `;
 
-            hubNovedadSql = `
+      hubNovedadSql = `
         AND COALESCE(g.novedad_hub_resolucion, 'CONTINUAR_ENVIO') <> 'RETENER_EN_HUB'
       `;
 
@@ -1797,33 +1802,33 @@ router.post("/:id/recepcion", async (req, res) => {
       if (estadoRecepcion === "RECIBIDO_OK") {
         const deValor = String(chk.rows[0].estado_logistico || "").toUpperCase();
 
-        await client.query(
-          `
-            UPDATE guias
-            SET
-              estado_logistico = $2,
-              novedad_hub_tipo = CASE
-                WHEN $2 = 'RECIBIDO_CENTRAL' THEN NULL
-                ELSE novedad_hub_tipo
-              END,
-              novedad_hub_detalle = CASE
-                WHEN $2 = 'RECIBIDO_CENTRAL' THEN NULL
-                ELSE novedad_hub_detalle
-              END,
-              novedad_hub_abierta = CASE
-                WHEN $2 = 'RECIBIDO_CENTRAL' THEN false
-                ELSE novedad_hub_abierta
-              END,
-              novedad_hub_resolucion = CASE
-                WHEN $2 = 'RECIBIDO_CENTRAL' THEN NULL
-                ELSE novedad_hub_resolucion
-              END
-            WHERE id = $1
-              AND estado_logistico = $3
-          `,
-          [guiaId, estadoDestinoRecepcionOK, estadoEsperadoEnRecepcion]
-        );
-        
+await client.query(
+  `
+    UPDATE guias
+    SET
+      estado_logistico = $2::varchar,
+      novedad_hub_tipo = CASE
+        WHEN $2::varchar = 'RECIBIDO_CENTRAL' THEN NULL
+        ELSE novedad_hub_tipo
+      END,
+      novedad_hub_detalle = CASE
+        WHEN $2::varchar = 'RECIBIDO_CENTRAL' THEN NULL
+        ELSE novedad_hub_detalle
+      END,
+      novedad_hub_abierta = CASE
+        WHEN $2::varchar = 'RECIBIDO_CENTRAL' THEN false
+        ELSE novedad_hub_abierta
+      END,
+      novedad_hub_resolucion = CASE
+        WHEN $2::varchar = 'RECIBIDO_CENTRAL' THEN NULL
+        ELSE novedad_hub_resolucion
+      END
+    WHERE id = $1
+      AND estado_logistico = $3::varchar
+  `,
+  [guiaId, estadoDestinoRecepcionOK, estadoEsperadoEnRecepcion]
+);
+
         if (deValor === estadoEsperadoEnRecepcion) {
           await insertarHistorialMovimiento(client, {
             guiaId,
@@ -1849,7 +1854,7 @@ router.post("/:id/recepcion", async (req, res) => {
           userId: u.userId,
           usuario: u.usuario
         });
-                    } else if (estadoRecepcion === "DANADO" || estadoRecepcion === "OBSERVADO") {
+      } else if (estadoRecepcion === "DANADO" || estadoRecepcion === "OBSERVADO") {
         const deValor = String(chk.rows[0].estado_logistico || "").toUpperCase();
         const tipoLoteActual = String(lote.tipo_lote || "").trim().toUpperCase();
         const esHub = isRecepcionHub(tipoLoteActual);
@@ -1861,27 +1866,27 @@ router.post("/:id/recepcion", async (req, res) => {
         const novedadTipo = estadoRecepcion === "DANADO" ? "DANADO" : "OBSERVADO";
         const evento = estadoRecepcion === "DANADO" ? "guia_danada" : "guia_observada";
 
-        await client.query(
-          `
-            UPDATE guias
-            SET
-              estado_logistico = $2,
-              novedad_hub_tipo = CASE WHEN $4 THEN $5 ELSE novedad_hub_tipo END,
-              novedad_hub_detalle = CASE WHEN $4 THEN $6 ELSE novedad_hub_detalle END,
-              novedad_hub_abierta = CASE WHEN $4 THEN true ELSE novedad_hub_abierta END,
-              novedad_hub_resolucion = CASE WHEN $4 THEN 'CONTINUAR_ENVIO' ELSE novedad_hub_resolucion END
-            WHERE id = $1
-              AND estado_logistico = $3
-          `,
-          [
-            guiaId,
-            nuevoEstadoGuia,
-            estadoEsperadoEnRecepcion,
-            esHub,
-            novedadTipo,
-            obs || `${novedadTipo} en recepción HUB`
-          ]
-        );
+await client.query(
+  `
+    UPDATE guias
+    SET
+      estado_logistico = $2::varchar,
+      novedad_hub_tipo = CASE WHEN $4 THEN $5::varchar ELSE novedad_hub_tipo END,
+      novedad_hub_detalle = CASE WHEN $4 THEN $6::text ELSE novedad_hub_detalle END,
+      novedad_hub_abierta = CASE WHEN $4 THEN true ELSE novedad_hub_abierta END,
+      novedad_hub_resolucion = CASE WHEN $4 THEN 'CONTINUAR_ENVIO' ELSE novedad_hub_resolucion END
+    WHERE id = $1
+      AND estado_logistico = $3::varchar
+  `,
+  [
+    guiaId,
+    nuevoEstadoGuia,
+    estadoEsperadoEnRecepcion,
+    esHub,
+    novedadTipo,
+    obs || `${novedadTipo} en recepción HUB`
+  ]
+);
 
         if (deValor === estadoEsperadoEnRecepcion) {
           await insertarHistorialMovimiento(client, {

@@ -3,119 +3,253 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>EXR • Detalle de Guía</title>
+  <title>EXR — Detalle de Guía</title>
+  <link rel="stylesheet" href="/css/exr_ui.css" />
   <style>
-    :root{
-      --bg:#0b0f14; --panel:#0f1620; --card:#121c28;
-      --muted:#8aa0b6; --text:#e6f0ff;
-      --ok:#20c997; --warn:#ffcc00; --bad:#ff5c77;
-      --accent:#7c3aed; --line:rgba(255,255,255,.08);
-      --shadow:0 10px 30px rgba(0,0,0,.35);
-      --r:14px; --pad:14px;
-      --font: ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;
+    .detalle-grid{
+      display:grid;
+      gap:14px;
+      margin-top:14px;
     }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{margin:0;font-family:var(--font);color:var(--text);background:linear-gradient(180deg,#070a0e 0%,var(--bg) 100%)}
-    .exr-shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
-    .exr-sidebar{border-right:1px solid var(--line);background:rgba(15,22,32,.9);backdrop-filter: blur(10px);padding:18px 14px;position:sticky;top:0;height:100vh}
-    .exr-brand{display:flex;align-items:center;gap:10px;padding:10px 10px 16px;border-bottom:1px solid var(--line);margin-bottom:14px}
-    .exr-dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--ok),var(--accent));box-shadow:0 0 0 4px rgba(32,201,151,.15)}
-    .exr-brand h1{font-size:14px;margin:0;letter-spacing:.5px}
-    .exr-nav a{display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none;padding:10px 10px;border-radius:10px;margin:4px 0;border:1px solid transparent}
-    .exr-nav a:hover{background:rgba(124,58,237,.12);border-color:rgba(124,58,237,.35)}
-    .exr-nav a.active{background:rgba(124,58,237,.16);border-color:rgba(124,58,237,.45)}
-    .exr-nav small{color:var(--muted);display:block;margin-top:2px}
-    .exr-main{padding:18px}
-    .exr-topbar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 16px;border:1px solid var(--line);border-radius:var(--r);background:rgba(18,28,40,.75);box-shadow:var(--shadow);position:sticky;top:12px;z-index:5;backdrop-filter: blur(10px);margin-bottom:14px}
-    .exr-title{font-weight:900;font-size:14px}
-    .exr-meta{color:var(--muted);font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .exr-card{border:1px solid var(--line);border-radius:var(--r);background:rgba(18,28,40,.65);box-shadow:var(--shadow);padding:var(--pad)}
-    .grid{display:grid;gap:14px}
-    .grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
-    .grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
-    @media (max-width:1200px){
-      .exr-shell{grid-template-columns:1fr}
-      .exr-sidebar{position:relative;height:auto}
-      .grid.two,.grid.three{grid-template-columns:1fr}
+
+    .grid{
+      display:grid;
+      gap:14px;
     }
-    .k{color:var(--muted);font-size:12px}
-    .v{font-weight:900;margin-top:6px}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
-    .muted{color:var(--muted)}
-    .hr{height:1px;background:var(--line);margin:12px 0}
-    label{display:block;color:var(--muted);font-size:12px;margin:0 0 6px}
-    .exr-input,.exr-select{width:100%;border:1px solid var(--line);background:rgba(0,0,0,.15);color:var(--text);padding:10px 12px;border-radius:12px;outline:none}
-    .exr-input:focus,.exr-select:focus{border-color:rgba(124,58,237,.6)}
-    .exr-btn{appearance:none;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);padding:9px 12px;border-radius:12px;cursor:pointer;font-weight:900}
-    .exr-btn:hover{border-color:rgba(124,58,237,.45)}
-    .exr-btn.primary{background:linear-gradient(135deg,rgba(32,201,151,.18),rgba(124,58,237,.22));border-color:rgba(124,58,237,.35)}
-    .exr-btn.danger{border-color:rgba(255,92,119,.45)}
-    .badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);font-size:12px;background:rgba(255,255,255,.03)}
-    .badge.ok{border-color:rgba(32,201,151,.35)}
-    .badge.warn{border-color:rgba(255,204,0,.35)}
-    .badge.bad{border-color:rgba(255,92,119,.35)}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
-    .col{flex:1;min-width:180px}
-    table{width:100%;border-collapse:separate;border-spacing:0 10px}
-    th{color:var(--muted);font-size:12px;text-align:left;padding:0 10px}
-    td{padding:12px 10px;background:rgba(0,0,0,.12);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-    tr td:first-child{border-left:1px solid var(--line);border-radius:12px 0 0 12px}
-    tr td:last-child{border-right:1px solid var(--line);border-radius:0 12px 12px 0}
-    .exr-toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:10px;z-index:9999}
-    .exr-toast{min-width:260px;max-width:360px;border:1px solid var(--line);background:rgba(18,28,40,.92);backdrop-filter: blur(10px);box-shadow:var(--shadow);border-radius:14px;padding:12px 12px;font-size:13px}
-    .exr-toast .t{font-weight:900;margin-bottom:2px}
-    .exr-toast .m{color:var(--muted)}
-    /* Modal pago */
-    .modal-back{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9998;padding:18px}
-    .modal{width:min(560px, 100%); border:1px solid var(--line); border-radius:16px; background:rgba(18,28,40,.95); box-shadow:var(--shadow); padding:14px}
-    .modal h3{margin:0 0 8px; font-size:14px}
-    .modal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap}
+
+    .grid.two{
+      grid-template-columns:repeat(2,minmax(0,1fr));
+    }
+
+    .grid.three{
+      grid-template-columns:repeat(3,minmax(0,1fr));
+    }
+
+    .k{
+      color:var(--muted);
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.2px;
+      font-weight:700;
+    }
+
+    .v{
+      font-weight:900;
+      margin-top:6px;
+    }
+
+    .mono{
+      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+    }
+
+    .muted{
+      color:var(--muted);
+    }
+
+    .hr{
+      height:1px;
+      background:var(--line);
+      margin:12px 0;
+    }
+
+    .detalle-top-actions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:flex-end;
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      font-size:12px;
+      background:rgba(255,255,255,.03);
+    }
+
+    .badge.ok{ border-color:rgba(32,201,151,.35); }
+    .badge.warn{ border-color:rgba(255,204,0,.35); }
+    .badge.bad{ border-color:rgba(255,92,119,.35); }
+
+    .detalle-hero{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:flex-start;
+    }
+
+    .detalle-hero-right{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+
+    .table-wrap{
+      overflow:auto;
+    }
+
+    table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0 10px;
+      min-width:760px;
+    }
+
+    th{
+      color:var(--muted);
+      font-size:12px;
+      text-align:left;
+      padding:0 10px;
+      text-transform:uppercase;
+      letter-spacing:.2px;
+    }
+
+    td{
+      padding:12px 10px;
+      background:rgba(0,0,0,.12);
+      border-top:1px solid var(--line);
+      border-bottom:1px solid var(--line);
+    }
+
+    tr td:first-child{
+      border-left:1px solid var(--line);
+      border-radius:12px 0 0 12px;
+    }
+
+    tr td:last-child{
+      border-right:1px solid var(--line);
+      border-radius:0 12px 12px 0;
+    }
+
+    .exr-toasts{
+      position:fixed;
+      right:16px;
+      bottom:16px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      z-index:9999;
+    }
+
+    .exr-toast{
+      min-width:260px;
+      max-width:360px;
+      border:1px solid var(--line);
+      background:rgba(18,28,40,.92);
+      backdrop-filter:blur(10px);
+      box-shadow:var(--shadow);
+      border-radius:14px;
+      padding:12px 12px;
+      font-size:13px;
+    }
+
+    .exr-toast .t{
+      font-weight:900;
+      margin-bottom:2px;
+    }
+
+    .exr-toast .m{
+      color:var(--muted);
+    }
+
+    .modal-back{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:9998;
+      padding:18px;
+    }
+
+    .modal{
+      width:min(560px,100%);
+      border:1px solid var(--line);
+      border-radius:16px;
+      background:rgba(18,28,40,.95);
+      box-shadow:var(--shadow);
+      padding:14px;
+    }
+
+    .modal h3{
+      margin:0 0 8px;
+      font-size:14px;
+    }
+
+    .modal .actions{
+      display:flex;
+      gap:10px;
+      justify-content:flex-end;
+      margin-top:12px;
+      flex-wrap:wrap;
+    }
+
+    .row{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:end;
+    }
+
+    .col{
+      flex:1;
+      min-width:180px;
+    }
+
+    @media (max-width: 1100px){
+      .grid.two,
+      .grid.three{
+        grid-template-columns:1fr;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="exr-shell">
-    <aside class="exr-sidebar">
-      <div class="exr-brand">
-        <div class="exr-dot"></div>
-        <h1>EXR • Detalle</h1>
-      </div>
-      <nav class="exr-nav">
-        <a href="/bandeja.html">Bandeja<br><small>Operación diaria</small></a>
-        <a href="/admin_panel.html">Admin<br><small>Sucursales / Usuarios</small></a>
-        <a href="/dashboard_ejecutivo.html">Dashboard<br><small>Solo dueño</small></a>
-      </nav>
-      <div class="hr"></div>
-      <div class="muted" style="font-size:12px;line-height:1.45">
-        Abrí este detalle desde bandeja o con:<br>
-        <span class="mono">/detalle.html?id=123</span> o <span class="mono">?n=000123</span>
-      </div>
-    </aside>
-
-    <main class="exr-main">
-      <div class="exr-topbar">
-        <div>
-          <div class="exr-title" id="title">Detalle de guía</div>
-          <div class="muted" style="font-size:12px;margin-top:4px" id="subtitle">—</div>
+  <div class="exr-pro-wrap">
+    <header class="exr-pro-topbar">
+      <div class="exr-pro-brand">
+        <div class="exr-pro-logo">
+          <img src="/assets/exr-logo-blanco.png" alt="EXR" />
         </div>
-        <div class="exr-meta">
-          <span id="userChip" class="badge">—</span>
-          <button class="exr-btn" id="btnBack">Volver</button>
-          <button class="exr-btn" id="btnEtiqueta">Etiqueta</button>
-          <button class="exr-btn primary" id="btnPago">Pago</button>
-          <button class="exr-btn danger" id="btnLogout">Salir</button>
+        <div style="min-width:0;">
+          <h1 class="exr-pro-title" id="title">Detalle de guía</h1>
+          <div class="exr-pro-subtitle" id="subtitle">—</div>
         </div>
       </div>
 
-      <section class="grid two" style="margin-bottom:14px">
-        <div class="exr-card">
-          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+      <div class="exr-pro-row" style="flex-wrap:wrap;justify-content:flex-end;">
+        <span id="userChip" class="exr-pro-chip">—</span>
+        <button class="exr-pro-btn" id="btnBack" type="button">Volver</button>
+        <button class="exr-pro-btn" id="btnEtiqueta" type="button">Etiqueta</button>
+        <button class="exr-pro-btn ok" id="btnPago" type="button">Pago</button>
+        <button class="exr-pro-btn bad" id="btnLogout" type="button">Salir</button>
+      </div>
+    </header>
+
+    <section class="detalle-grid">
+      <div class="exr-pro-row" style="justify-content:flex-start;gap:8px;flex-wrap:wrap;">
+        <a class="exr-pro-chip" href="/bandeja.html" style="text-decoration:none;">Bandeja</a>
+        <a class="exr-pro-chip" href="/admin_panel.html" style="text-decoration:none;">Admin</a>
+        <a class="exr-pro-chip" href="/dashboard_ejecutivo.html" style="text-decoration:none;">Dashboard</a>
+      </div>
+
+      <section class="grid two">
+        <div class="exr-pro-card">
+          <div class="detalle-hero">
             <div>
               <div class="k">Guía</div>
               <div class="v mono" id="g_num">—</div>
               <div class="muted" style="font-size:12px;margin-top:6px" id="g_created">—</div>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
+
+            <div class="detalle-hero-right">
               <span class="badge" id="b_log">—</span>
               <span class="badge" id="b_pago">—</span>
             </div>
@@ -156,18 +290,18 @@
           </div>
 
           <div class="hr"></div>
-          <div class="muted" style="font-size:12px">
+
+          <div class="exr-pro-hint">
             Nota: si está <b>PAGADO</b>, el método es obligatorio (EFECTIVO / MERCADO_PAGO / TRANSFERENCIA).
           </div>
         </div>
 
-        <div class="exr-card">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-            <div>
-              <b>Clientes</b>
-              <div class="muted" style="font-size:12px;margin-top:4px">Remitente / Destinatario</div>
-            </div>
+        <div class="exr-pro-card">
+          <div>
+            <div class="panel-h" style="margin:0 0 4px 0;">Clientes</div>
+            <div class="panel-p">Remitente / Destinatario</div>
           </div>
+
           <div class="hr"></div>
 
           <div class="grid two">
@@ -192,57 +326,79 @@
         </div>
       </section>
 
-      <section class="exr-card" style="margin-bottom:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-          <div>
-            <b>Bultos</b>
-            <div class="muted" style="font-size:12px">Listado (si aplica)</div>
-          </div>
+      <section class="exr-pro-card">
+        <div>
+          <div class="panel-h" style="margin:0 0 4px 0;">Bultos</div>
+          <div class="panel-p">Listado (si aplica)</div>
         </div>
+
         <div class="hr"></div>
-        <div style="overflow:auto">
+
+        <div class="table-wrap">
           <table>
-            <thead><tr><th>#</th><th>Descripción</th><th>Peso</th><th>Medidas</th></tr></thead>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Descripción</th>
+                <th>Peso</th>
+                <th>Medidas</th>
+              </tr>
+            </thead>
             <tbody id="tb_bultos"></tbody>
           </table>
         </div>
       </section>
 
-      <section class="exr-card" style="margin-bottom:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-          <div>
-            <b>Items</b>
-            <div class="muted" style="font-size:12px">Detalle de contenido (si aplica)</div>
-          </div>
+      <section class="exr-pro-card">
+        <div>
+          <div class="panel-h" style="margin:0 0 4px 0;">Items</div>
+          <div class="panel-p">Detalle de contenido (si aplica)</div>
         </div>
+
         <div class="hr"></div>
-        <div style="overflow:auto">
+
+        <div class="table-wrap">
           <table>
-            <thead><tr><th>#</th><th>Artículo</th><th>Cant</th><th>Valor</th></tr></thead>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Artículo</th>
+                <th>Cant</th>
+                <th>Valor</th>
+              </tr>
+            </thead>
             <tbody id="tb_items"></tbody>
           </table>
         </div>
       </section>
 
-      <section class="exr-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-          <div>
-            <b>Historial</b>
-            <div class="muted" style="font-size:12px">Auditoría (ESTADO / PAGO)</div>
-          </div>
+      <section class="exr-pro-card">
+        <div>
+          <div class="panel-h" style="margin:0 0 4px 0;">Historial</div>
+          <div class="panel-p">Auditoría (ESTADO / PAGO)</div>
         </div>
+
         <div class="hr"></div>
-        <div style="overflow:auto">
+
+        <div class="table-wrap">
           <table>
-            <thead><tr><th>Fecha</th><th>Tipo</th><th>De</th><th>A</th><th>Sucursal</th><th>Usuario</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>De</th>
+                <th>A</th>
+                <th>Sucursal</th>
+                <th>Usuario</th>
+              </tr>
+            </thead>
             <tbody id="tb_hist"></tbody>
           </table>
         </div>
       </section>
-    </main>
+    </section>
   </div>
 
-  <!-- Modal pago -->
   <div class="modal-back" id="modalBack">
     <div class="modal">
       <h3>Actualizar pago</h3>
@@ -251,7 +407,7 @@
 
       <div class="row">
         <div class="col">
-          <label>Estado pago</label>
+          <label class="k">Estado pago</label>
           <select class="exr-select" id="m_estado_pago">
             <option value="PENDIENTE">PENDIENTE</option>
             <option value="CONTRA_ENTREGA">CONTRA_ENTREGA</option>
@@ -259,7 +415,7 @@
           </select>
         </div>
         <div class="col">
-          <label>Método pago (solo si PAGADO)</label>
+          <label class="k">Método pago (solo si PAGADO)</label>
           <select class="exr-select" id="m_metodo_pago">
             <option value="">—</option>
             <option value="EFECTIVO">EFECTIVO</option>
@@ -270,14 +426,13 @@
       </div>
 
       <div class="actions">
-        <button class="exr-btn" id="m_cancel">Cancelar</button>
-        <button class="exr-btn primary" id="m_save">Guardar</button>
+        <button class="exr-pro-btn" id="m_cancel" type="button">Cancelar</button>
+        <button class="exr-pro-btn ok" id="m_save" type="button">Guardar</button>
       </div>
     </div>
   </div>
 
   <script>
-    // ===== UI KIT =====
     const EXR = (() => {
       const $ = (s, el=document) => el.querySelector(s);
       const elToasts = () => {
@@ -301,7 +456,17 @@
       };
       const money = (n) => Number(n ?? 0).toLocaleString("es-AR", { style:"currency", currency:"ARS" });
       const badgeLogText = (estado) => {
-        const map = { RECIBIDO_ORIGEN:"RECIBIDO_ORIGEN", EN_TRANSITO:"EN_TRANSITO", RECIBIDO_DESTINO:"RECIBIDO_DESTINO", ENTREGADO:"ENTREGADO" };
+        const map = {
+          RECIBIDO_ORIGEN: "RECIBIDO_ORIGEN",
+          EN_TRANSITO: "EN_TRANSITO",
+          EN_TRANSITO_A_CENTRAL: "EN_TRANSITO_A_CENTRAL",
+          RECIBIDO_CENTRAL: "RECIBIDO_CENTRAL",
+          RECIBIDO_CENTRAL_OBSERVADO: "RECIBIDO_CENTRAL_OBSERVADO",
+          EN_TRANSITO_A_DESTINO: "EN_TRANSITO_A_DESTINO",
+          RECIBIDO_DESTINO: "RECIBIDO_DESTINO",
+          RECIBIDO_DESTINO_OBSERVADO: "RECIBIDO_DESTINO_OBSERVADO",
+          ENTREGADO: "ENTREGADO"
+        };
         return map[estado] || (estado || "—");
       };
       const badgePagoText = (estado, metodo) => {
@@ -312,7 +477,6 @@
       return { $, esc, toast, money, badgeLogText, badgePagoText };
     })();
 
-    // ===== AUTH + API =====
     const LS_TOKEN = "exr_token";
     function getToken(){ return localStorage.getItem(LS_TOKEN) || ""; }
     function logout(){ localStorage.removeItem(LS_TOKEN); location.href="/operador.html"; }
@@ -331,29 +495,26 @@
       return data;
     }
 
-    // ===== HELPERS =====
     function qsParam(k){ return new URLSearchParams(location.search).get(k); }
+
     function setBadge(elId, text, kind){
       const el = document.getElementById(elId);
       el.className = "badge " + (kind || "");
       el.textContent = text;
     }
+
     function guessBack(){
-      // vuelve a bandeja si no hay history, si viene de un link externo => bandeja
       if(history.length > 1) history.back();
       else location.href = "/bandeja.html";
     }
 
-    // ===== STATE =====
     let current = { guia:null, bultos:[], items:[], eventos:[], historial:[] };
 
     function normalizeDetalle(d){
-      // Tu backend: /guias/:id/detalle => { guia, bultos, items, eventos }
       const guia = d?.guia || d?.row || d;
       const bultos = d?.bultos || d?.bulto || [];
       const items = d?.items || d?.guia_items || [];
       const eventos = d?.eventos || d?.guia_eventos || [];
-      // historial_movimientos puede venir como "historial" o dentro de eventos o en d.movimientos
       const historial = d?.historial || d?.movimientos || d?.historial_movimientos || [];
       return { guia, bultos, items, eventos, historial };
     }
@@ -363,7 +524,7 @@
       current = det;
 
       const num = g.numero_guia ?? g.id ?? "—";
-      document.getElementById("title").textContent = `Detalle • ${num}`;
+      document.getElementById("title").textContent = `Detalle de guía`;
       document.getElementById("subtitle").textContent =
         `${g.sucursal_origen_nombre || g.sucursal_origen || ("S" + (g.sucursal_origen_id||""))} → ` +
         `${g.sucursal_destino_nombre || g.sucursal_destino || ("S" + (g.sucursal_destino_id||""))}`;
@@ -393,7 +554,6 @@
 
       document.getElementById("obs").textContent = g.observaciones || g.obs || "—";
 
-      // BULTOS
       const tbB = document.getElementById("tb_bultos");
       const bultos = det.bultos || [];
       tbB.innerHTML = bultos.length ? bultos.map((b,i)=>`
@@ -405,7 +565,6 @@
         </tr>
       `).join("") : `<tr><td colspan="4" class="muted">Sin bultos.</td></tr>`;
 
-      // ITEMS
       const tbI = document.getElementById("tb_items");
       const items = det.items || [];
       tbI.innerHTML = items.length ? items.map((it,i)=>`
@@ -417,7 +576,6 @@
         </tr>
       `).join("") : `<tr><td colspan="4" class="muted">Sin items.</td></tr>`;
 
-      // HISTORIAL
       const tbH = document.getElementById("tb_hist");
       const hist = det.historial || det.eventos || [];
       tbH.innerHTML = hist.length ? hist.map(h=>`
@@ -431,7 +589,6 @@
         </tr>
       `).join("") : `<tr><td colspan="6" class="muted">Sin movimientos.</td></tr>`;
 
-      // preparar modal pago
       document.getElementById("modalSub").textContent =
         `Guía ${num} • ${g.remitente_nombre || "—"} → ${g.destinatario_nombre || "—"}`;
       document.getElementById("m_estado_pago").value = g.estado_pago || "PENDIENTE";
@@ -439,11 +596,11 @@
       document.getElementById("m_metodo_pago").disabled = (document.getElementById("m_estado_pago").value !== "PAGADO");
     }
 
-    // ===== MODAL PAGO =====
     function openPagoModal(){
       document.getElementById("modalBack").style.display = "flex";
       document.getElementById("m_metodo_pago").disabled = (document.getElementById("m_estado_pago").value !== "PAGADO");
     }
+
     function closePagoModal(){
       document.getElementById("modalBack").style.display = "none";
     }
@@ -484,13 +641,12 @@
       closePagoModal();
       await load();
     }
+
     document.getElementById("m_save").addEventListener("click", async () => {
       try{ await savePago(); } catch(e){ EXR.toast("Error", e.message, "bad"); }
     });
 
-    // ===== LOAD =====
     async function load(){
-      // Validar sesión
       try{
         const me = await api("/test-auth");
         const u = me?.user || me || {};
@@ -501,7 +657,7 @@
       }
 
       const id = qsParam("id");
-      const n = qsParam("n"); // opcional: numero_guia, si vos lo usás en bandeja interna (si no, queda como fallback)
+      const n = qsParam("n");
       if(!id && !n){
         EXR.toast("Falta parámetro", "Usá /detalle.html?id=123 (o abrilo desde Bandeja).", "warn");
         return;
@@ -512,8 +668,6 @@
         if(id){
           data = await api(`/guias/${encodeURIComponent(id)}/detalle`);
         }else{
-          // Fallback: si algún día querés soportar por número, lo resolvés del lado backend.
-          // Hoy no inventamos ruta nueva. Aviso claro.
           EXR.toast("No soportado", "Abrí con ?id=... (por número requiere endpoint).", "warn");
           return;
         }
@@ -525,7 +679,6 @@
       }
     }
 
-    // ===== EVENTS =====
     document.getElementById("btnLogout").addEventListener("click", logout);
     document.getElementById("btnBack").addEventListener("click", guessBack);
     document.getElementById("btnEtiqueta").addEventListener("click", () => {
@@ -535,7 +688,6 @@
     });
     document.getElementById("btnPago").addEventListener("click", openPagoModal);
 
-    // Boot
     load();
   </script>
 </body>

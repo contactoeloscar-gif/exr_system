@@ -24,6 +24,17 @@
       color:var(--muted);
     }
 
+    .cc-summary{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+
+    .cc-block{
+      margin-top:14px;
+    }
+
     @media (max-width: 900px){
       .cc-grid{ grid-template-columns:1fr; }
       .cc-kv{ grid-template-columns:1fr; }
@@ -99,17 +110,17 @@
       </div>
 
       <div class="exr-pro-card">
-        <h2 class="exr-pro-section-title">Resumen</h2>
-        <div class="exr-pro-row" id="resumenPills"></div>
+        <h2 class="exr-pro-section-title">Resumen ejecutivo</h2>
+        <div class="cc-summary" id="resumenPills"></div>
       </div>
     </section>
 
-    <section class="exr-pro-card" style="margin-top:14px;">
-      <h2 class="exr-pro-section-title">Detalle de guías</h2>
+    <section class="exr-pro-card cc-block">
+      <h2 class="exr-pro-section-title">Detalle de guías incluidas</h2>
       <div id="detalleBox"></div>
     </section>
   </div>
 
-  <script src="/cierre_comprobante.js?v=1"></script>
+  <script src="/cierre_comprobante.js?v=2"></script>
 </body>
 </html>

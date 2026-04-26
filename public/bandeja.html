@@ -6,206 +6,226 @@
   <title>EXR — Bandeja</title>
   <link rel="stylesheet" href="/css/exr_ui.css" />
   <style>
-    .bandeja-card{ margin-top:14px; }
-    .bandeja-head-note{ color:var(--muted); font-size:12px; }
-    .bandeja-filters{
-      display:grid;
-      grid-template-columns: 1.3fr 1fr 1fr 1fr auto;
-      gap:12px;
-      align-items:end;
-    }
-    .bandeja-toolbar-top{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      gap:10px;
-      flex-wrap:wrap;
-    }
-    .bandeja-toolbar-bottom{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      gap:10px;
-      flex-wrap:wrap;
-    }
-    .bandeja-pager{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      flex-wrap:wrap;
-      margin-top:12px;
-    }
-    .bandeja-pager-left,
-    .bandeja-pager-right{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      flex-wrap:wrap;
-    }
-    .bandeja-row-bad{
-      background:rgba(255,92,119,.10);
-    }
-    .bandeja-table .mono{
-      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
-    }
+.exr-pro-wrap{
+  max-width: 1620px;
+}
 
-    .exr-toast-wrap{
-      position:fixed;
-      right:14px;
-      bottom:14px;
-      z-index:10050;
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-      pointer-events:none;
-    }
-    .exr-toast{
-      min-width:260px;
-      max-width:360px;
-      border:1px solid var(--line);
-      background:rgba(18,28,40,.96);
-      box-shadow:var(--shadow);
-      border-radius:14px;
-      padding:12px 12px;
-      font-size:13px;
-      pointer-events:auto;
-    }
-    .exr-toast .t{ font-weight:900; margin-bottom:2px; }
-    .exr-toast .m{ color:var(--muted); }
+.bandeja-grid{
+  display:grid;
+  gap:12px;
+  margin-top:12px;
+}
 
-    @media (max-width: 1100px){
-      .bandeja-filters{
-        grid-template-columns: 1fr 1fr;
-      }
-    }
+.bandeja-filtros{
+  display:grid;
+  grid-template-columns:2.2fr 1fr 1fr 1fr 120px;
+  gap:10px;
+  align-items:center;
+}
 
-    @media (max-width: 720px){
-      .bandeja-filters{
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
+.bandeja-tabs{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.bandeja-toolbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
+
+.bandeja-toolbar-right{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.sync-chip.ok{ color:var(--ok); }
+.sync-chip.same{ color:#ffd76a; }
+.sync-chip.err{ color:var(--bad); }
+
+.table-wrap{
+  overflow:visible;
+}
+
+.table-wrap table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+}
+
+.table-wrap th,
+.table-wrap td{
+  padding:8px 7px;
+  border-bottom:1px solid var(--line);
+  vertical-align:top;
+  word-break:break-word;
+  overflow-wrap:anywhere;
+}
+
+.table-wrap th{
+  text-align:left;
+  color:var(--muted);
+  font-weight:800;
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.2px;
+}
+
+.right{ text-align:right; }
+.mono{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+
+.pager{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+
+@media (max-width: 1320px){
+  .exr-pro-wrap{
+    max-width: 100%;
+  }
+
+  .table-wrap{
+    overflow:auto;
+  }
+
+  .table-wrap table{
+    min-width:1180px;
+    table-layout:auto;
+  }
+}
+
+@media (max-width: 1220px){
+  .bandeja-filtros{
+    grid-template-columns:1fr 1fr 1fr;
+  }
+}
+
+@media (max-width: 900px){
+  .bandeja-filtros{
+    grid-template-columns:1fr;
+  }
+}
+
+</style>
 </head>
 <body>
   <div class="exr-pro-wrap">
     <header class="exr-pro-topbar">
       <div class="exr-pro-brand">
         <div class="exr-pro-logo">
-          <img src="/assets/exr_logo.png" alt="EXR" />
+          <img src="/assets/exr-logo-blanco.png" alt="EXR" />
         </div>
         <div style="min-width:0;">
           <h1 class="exr-pro-title">Bandeja</h1>
-          <div class="exr-pro-subtitle">Guías recientes y acciones rápidas</div>
+          <div class="exr-pro-subtitle">Seguimiento operativo, cobros, entregas, alertas y trazabilidad</div>
         </div>
       </div>
 
-      <div class="exr-pro-row">
-        <span id="userChip" class="badge">—</span>
-        <span id="syncChip" class="badge">—</span>
-        <button class="exr-pro-btn" id="btnExport" type="button">Export CSV</button>
-        <button class="exr-pro-btn" id="btnRefresh" type="button">Refrescar</button>
-        <button id="btnLogout" type="button" class="exr-pro-btn bad">Salir</button>
+      <div class="exr-pro-row" style="flex-wrap:wrap;justify-content:flex-end;">
+        <span class="exr-pro-chip" id="userChip">—</span>
+        <button class="exr-pro-btn" id="btnRefresh" type="button">Actualizar</button>
+<!-- <button class="exr-pro-btn" id="btnExport" type="button">Exportar CSV</button> -->
+         <button class="exr-pro-btn" id="btnOperador" type="button">Volver</button>
+        <button class="exr-pro-btn bad" id="btnLogout" type="button">Salir</button>
       </div>
     </header>
 
-    <section class="exr-pro-card bandeja-card">
-      <div class="bandeja-toolbar-top">
-        <div class="tabs" id="tabs"></div>
-        <div class="bandeja-head-note">Mostrando <b id="countTxt">0</b> guías</div>
-      </div>
+    <section class="bandeja-grid">
+      <div class="exr-pro-card">
+        <div class="panel-h" style="margin-bottom:10px;">Filtros y control</div>
 
-      <div class="hr"></div>
+        <div class="bandeja-filtros">
+          <input id="q" type="text" placeholder="Buscar por número / remitente / destinatario" />
 
-      <div class="bandeja-toolbar-bottom">
-        <div class="tabs" id="quickChips" style="gap:6px"></div>
-        <div class="bandeja-head-note">Accesos rápidos</div>
-      </div>
-
-      <div class="hr"></div>
-
-      <div class="bandeja-filters">
-        <div class="exr-pro-field">
-          <label for="q">Buscar</label>
-          <input class="exr-pro-input" id="q" placeholder="N° guía / nombre / teléfono" />
-        </div>
-
-        <div class="exr-pro-field">
-          <label for="f_estado_log">Estado logístico</label>
-          <select class="exr-pro-select" id="f_estado_log">
-            <option value="">Todos</option>
+          <select id="f_estado_log">
+            <option value="">Estado logístico: todos</option>
             <option value="RECIBIDO_ORIGEN">RECIBIDO_ORIGEN</option>
-            <option value="EN_TRANSITO">EN_TRANSITO</option>
-            <option value="RECIBIDO_DESTINO">RECIBIDO_DESTINO</option>
+            <option value="EN_TRANSITO">EN_TRANSITO (agrupa)</option>
+            <option value="RECIBIDO_CENTRAL">RECIBIDO_CENTRAL (agrupa)</option>
+            <option value="RECIBIDO_DESTINO">RECIBIDO_DESTINO (agrupa)</option>
             <option value="ENTREGADO">ENTREGADO</option>
           </select>
-        </div>
 
-        <div class="exr-pro-field">
-          <label for="f_estado_pago">Estado pago</label>
-<select class="exr-pro-select" id="f_estado_pago">
-  <option value="">Todos</option>
-  <option value="pendiente">Pendiente</option>
-  <option value="pagado">Pagado</option>
-  <option value="pendiente_rendicion">Pendiente rendición</option>
-  <option value="rendido">Rendido</option>
-  <option value="observado">Observado</option>
-  <option value="pendiente_origen">Pendiente origen</option>
-  <option value="pendiente_destino">Pendiente destino</option>
-  <option value="cobrado_destino">Cobrado destino</option>
-  <option value="no_aplica">No aplica</option>
-</select>        </div>
+          <select id="f_estado_pago">
+            <option value="">Estado pago: todos</option>
+            <option value="pendiente_origen">pendiente_origen</option>
+            <option value="pendiente_destino">pendiente_destino</option>
+            <option value="cobrado_destino">cobrado_destino</option>
+            <option value="pendiente_rendicion">pendiente_rendicion</option>
+            <option value="rendido">rendido</option>
+            <option value="observado">observado</option>
+          </select>
 
-        <div class="exr-pro-field">
-          <label for="f_tipo_cobro">Tipo cobro</label>
-          <select class="exr-pro-select" id="f_tipo_cobro">
-            <option value="">Todos</option>
+          <select id="f_tipo_cobro">
+            <option value="">Tipo cobro: todos</option>
             <option value="ORIGEN">ORIGEN</option>
             <option value="DESTINO">DESTINO</option>
           </select>
-        </div>
 
-        <div class="exr-pro-field" style="min-width:220px;">
-          <label>&nbsp;</label>
-          <button class="exr-pro-btn ok" id="btnBuscar" type="button" style="width:100%;justify-content:center;">Buscar</button>
+          <select id="limitSel">
+            <option value="25">25 filas</option>
+            <option value="50">50 filas</option>
+            <option value="100">100 filas</option>
+          </select>
         </div>
       </div>
-    </section>
 
-    <section class="exr-pro-card bandeja-card">
-      <div id="msg" class="muted" style="font-size:12px;margin-bottom:10px"></div>
+      <div class="exr-pro-card">
+        <div class="bandeja-toolbar">
+          <div>
+            <div class="panel-h" style="margin-bottom:8px;">Etapas</div>
+            <div id="tabs" class="bandeja-tabs"></div>
+          </div>
 
-      <div class="exr-pro-table-wrap">
-        <table class="exr-pro-table bandeja-table">
+          <div class="bandeja-toolbar-right">
+            <div id="syncChip" class="exr-pro-chip sync-chip">Sin sincronizar</div>
+            <div id="countTxt" class="exr-pro-chip">0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="exr-pro-card">
+        <div class="panel-h" style="margin-bottom:8px;">Vistas rápidas</div>
+        <div id="quickChips" class="bandeja-tabs"></div>
+      </div>
+
+      <div id="msg"></div>
+
+      <div class="exr-pro-card table-wrap">
+        <table>
           <thead>
             <tr>
-              <th>N°</th>
-              <th>Ruta</th>
+              <th>N° guía</th>
+              <th>Ruta / fecha</th>
               <th>Cliente</th>
               <th>Estados</th>
-              <th>Monto</th>
-              <th>Acciones</th>
+              <th>Monto / contable</th>
+              <th class="right">Acciones</th>
             </tr>
           </thead>
-          <tbody id="tbody"></tbody>
+          <tbody id="tbody">
+            <tr>
+              <td colspan="6" class="muted">Cargando…</td>
+            </tr>
+          </tbody>
         </table>
-      </div>
 
-      <div class="bandeja-pager">
-        <div class="bandeja-pager-left">
-          <span class="exr-pro-pill" id="pagerInfo">—</span>
-          <span class="exr-pro-pill">Limit:
-            <select class="exr-pro-select" id="limitSel" style="padding:6px 10px;border-radius:999px">
-              <option value="25">25</option>
-              <option value="50">50</option>
-              <option value="100">100</option>
-            </select>
-          </span>
-        </div>
+        <div class="pager">
+          <div id="pagerInfo" class="exr-pro-hint">Página 1 / 1 • Total: 0</div>
 
-        <div class="bandeja-pager-right">
-          <button class="exr-pro-btn" id="btnPrev" type="button">Anterior</button>
-          <button class="exr-pro-btn" id="btnNext" type="button">Siguiente</button>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button id="btnPrev" type="button" class="exr-pro-btn">Anterior</button>
+            <button id="btnNext" type="button" class="exr-pro-btn">Siguiente</button>
+          </div>
         </div>
       </div>
     </section>

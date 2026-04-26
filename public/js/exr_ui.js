@@ -38,10 +38,15 @@
   // Helper badges para estados
   function badgeEstadoLogistico(estado){
     const map = {
-      RECIBIDO_ORIGEN: ["Recibido origen","warn"],
-      EN_TRANSITO: ["En tránsito","warn"],
-      RECIBIDO_DESTINO: ["Recibido destino","warn"],
-      ENTREGADO: ["Entregado","ok"],
+RECIBIDO_ORIGEN: ["Recibido origen", "warn"],
+EN_TRANSITO: ["En tránsito", "warn"],
+EN_TRANSITO_A_CENTRAL: ["A central", "warn"],
+RECIBIDO_CENTRAL: ["Recibido central", "ok"],
+RECIBIDO_CENTRAL_OBSERVADO: ["Central observado", "bad"],
+EN_TRANSITO_A_DESTINO: ["A destino", "warn"],
+RECIBIDO_DESTINO: ["Recibido destino", "warn"],
+RECIBIDO_DESTINO_OBSERVADO: ["Destino observado", "bad"],
+ENTREGADO: ["Entregado", "ok"],
     };
     const [label, cls] = map[estado] || [estado || "—",""];
     return `<span class="badge ${cls}">${label}</span>`;

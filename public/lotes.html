@@ -3,196 +3,317 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Lotes - EXR</title>
+  <title>EXR — Lotes</title>
   <link rel="stylesheet" href="/css/exr_ui.css" />
   <style>
-    body { background:#0f1115; color:#e8edf2; font-family:Arial, Helvetica, sans-serif; margin:0; }
-    .wrap { max-width:1400px; margin:0 auto; padding:18px; }
-    .topbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
-    .title { font-size:28px; font-weight:700; }
-    .muted { color:#a6b0bb; font-size:13px; }
-    .grid { display:grid; grid-template-columns: 420px 1fr; gap:16px; }
-    .card {
-      background:#171b21;
-      border:1px solid #28303a;
+.exr-pro-wrap{
+  max-width: 1600px;
+}
+
+    .lotes-grid{
+      display:grid;
+      grid-template-columns:380px 1fr;
+      gap:14px;
+      margin-top:12px;
+    }
+
+    .lotes-toolbar{
+      display:grid;
+      grid-template-columns:1.1fr 1fr 1fr auto;
+      gap:10px;
+      margin-bottom:12px;
+    }
+
+    .lotes-split{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+
+    .lotes-form-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+
+    .lotes-form-grid .full{
+      grid-column:1 / -1;
+    }
+
+.table-wrap{
+  overflow:visible;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:rgba(255,255,255,.02);
+}
+
+.table-wrap table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+}
+
+.table-wrap th,
+.table-wrap td{
+  border-bottom:1px solid rgba(255,255,255,.06);
+  padding:8px 7px;
+  text-align:left;
+  font-size:12px;
+  vertical-align:top;
+}
+ 
+    .table-wrap th,
+.table-wrap td{
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+    .table-wrap th{
+      background:rgba(255,255,255,.03);
+      color:var(--muted);
+      position:sticky;
+      top:0;
+      text-transform:uppercase;
+      letter-spacing:.2px;
+      font-size:12px;
+    }
+
+    .table-wrap tr:hover td{
+      background:rgba(124,58,237,.06);
+    }
+
+    .row-actions{
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+    }
+
+.row-actions button{
+  width:auto;
+  padding:6px 8px;
+  font-size:11px;
+}
+    .list-box{
+      border:1px solid var(--line);
       border-radius:14px;
-      padding:14px;
-      box-shadow:0 8px 22px rgba(0,0,0,.22);
-    }
-    .card h3 { margin:0 0 10px; font-size:18px; }
-    .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-    .form-grid .full { grid-column:1 / -1; }
-    label { display:block; margin-bottom:4px; font-size:12px; color:#aeb7c2; }
-    input, select, textarea, button {
-      width:100%;
-      border-radius:10px;
-      border:1px solid #33404d;
-      background:#10151b;
-      color:#e8edf2;
-      padding:10px 12px;
-      font-size:14px;
-    }
-    textarea { min-height:82px; resize:vertical; }
-    button {
-      cursor:pointer;
-      background:#1f8f5f;
-      border-color:#1f8f5f;
-      font-weight:700;
-    }
-    button.secondary {
-      background:#1b232c;
-      border-color:#33404d;
-    }
-    button.warn {
-      background:#a56a16;
-      border-color:#a56a16;
-    }
-    button.danger {
-      background:#a33636;
-      border-color:#a33636;
-    }
-    button:disabled {
-      opacity:.55;
-      cursor:not-allowed;
-    }
-    .toolbar { display:grid; grid-template-columns: 1.1fr 1fr 1fr auto; gap:10px; margin-bottom:12px; }
-    .table-wrap { overflow:auto; border:1px solid #29323c; border-radius:12px; }
-    table { width:100%; border-collapse:collapse; min-width:1020px; }
-    th, td { border-bottom:1px solid #29323c; padding:10px; text-align:left; font-size:13px; vertical-align:top; }
-    th { background:#11161d; color:#b7c1ca; position:sticky; top:0; }
-    tr:hover td { background:#121820; }
-    .badge {
-      display:inline-block;
-      padding:4px 8px;
-      border-radius:999px;
-      font-size:11px;
-      font-weight:700;
-      border:1px solid #425164;
-      background:#121820;
-    }
-    .row-actions { display:flex; gap:6px; flex-wrap:wrap; }
-    .row-actions button { width:auto; padding:7px 10px; font-size:12px; }
-    .split { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-    .list-box {
-      border:1px solid #29323c;
-      border-radius:12px;
       padding:10px;
-      background:#12171d;
+      background:rgba(255,255,255,.02);
       min-height:180px;
       overflow:auto;
     }
-    .mini-title { font-size:13px; font-weight:700; margin-bottom:8px; }
-    .item {
-      border:1px solid #303944;
-      border-radius:10px;
+
+    .mini-title{
+      font-size:13px;
+      font-weight:800;
+      margin-bottom:8px;
+    }
+
+    .item{
+      border:1px solid var(--line);
+      border-radius:12px;
       padding:8px;
       margin-bottom:8px;
-      background:#171d25;
+      background:rgba(255,255,255,.03);
     }
-    .item:last-child { margin-bottom:0; }
-    .item .line1 { font-weight:700; font-size:13px; }
-    .item .line2 { font-size:12px; color:#aeb7c2; margin-top:4px; }
-    .item .line3 { font-size:12px; color:#8dc5a8; margin-top:4px; }
-    .detail-head {
+
+    .item:last-child{
+      margin-bottom:0;
+    }
+
+    .item .line1{
+      font-weight:800;
+      font-size:13px;
+    }
+
+    .item .line2{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:4px;
+    }
+
+    .item .line3{
+      font-size:12px;
+      color:#8dc5a8;
+      margin-top:4px;
+    }
+
+    .detail-head{
       display:flex;
       justify-content:space-between;
       align-items:flex-start;
       gap:10px;
       margin-bottom:12px;
     }
-    .detail-number { font-size:22px; font-weight:700; }
-    .detail-actions {
+
+    .detail-number{
+      font-size:22px;
+      font-weight:800;
+    }
+
+    .detail-actions{
       display:flex;
       gap:8px;
       flex-wrap:wrap;
       justify-content:flex-end;
     }
-    .detail-actions button { width:auto; padding:9px 12px; }
-    .detail-meta {
-      display:grid;
-      grid-template-columns:repeat(5,1fr);
-      gap:10px;
-      margin-bottom:12px;
+
+    .detail-actions button{
+      width:auto;
+      padding:9px 12px;
     }
-    .meta-box {
-      border:1px solid #2e3843;
+
+.detail-meta{
+  display:grid;
+  grid-template-columns:repeat(5, 1fr);
+  gap:8px;
+  margin-bottom:10px;
+}
+    .meta-box{
+      border:1px solid var(--line);
       border-radius:12px;
-      background:#11161d;
-      padding:10px;
+      background:rgba(255,255,255,.03);
+      padding:8px;
     }
-    .meta-k { font-size:11px; color:#9facb8; text-transform:uppercase; margin-bottom:5px; }
-    .meta-v { font-size:14px; font-weight:700; }
-    .status {
+
+    .meta-k{
+      font-size:11px;
+      color:var(--muted);
+      text-transform:uppercase;
+      margin-bottom:5px;
+      letter-spacing:.2px;
+    }
+
+    .meta-v{
+      font-size:14px;
+      font-weight:800;
+    }
+
+    .status{
       margin-top:10px;
       font-size:13px;
-      color:#b7c1ca;
+      color:var(--muted);
       min-height:18px;
     }
-    .empty {
-      color:#9aa5b1;
+
+    .empty{
+      color:var(--muted);
       font-size:13px;
       padding:12px;
-      border:1px dashed #3a4654;
+      border:1px dashed rgba(255,255,255,.14);
       border-radius:12px;
-      background:#11161d;
+      background:rgba(255,255,255,.02);
     }
-    .section-spacer { margin-top:14px; }
 
-    .hint-box {
+    .section-spacer{
+      margin-top:14px;
+    }
+
+    .hint-box{
       margin-top:10px;
       padding:12px;
-      border:1px solid #33404d;
-      border-radius:12px;
-      background:#11161d;
-      color:#d7dde4;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:rgba(255,255,255,.03);
+      color:var(--text);
       font-size:13px;
       line-height:1.45;
     }
 
-    .section-block {
+    .section-block{
       margin-top:14px;
       padding:12px;
-      border:1px solid #29323c;
-      border-radius:12px;
-      background:#10151b;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:rgba(255,255,255,.02);
     }
 
-    .section-block + .section-block {
+    .section-block + .section-block{
       margin-top:14px;
     }
 
-    .section-caption {
-      color:#8fb4c9;
+    .section-caption{
+      color:var(--muted);
       font-size:12px;
       margin-top:6px;
       margin-bottom:10px;
+      line-height:1.45;
     }
 
-    @media (max-width: 1100px) {
-      .grid { grid-template-columns:1fr; }
-      .detail-meta { grid-template-columns:repeat(2,1fr); }
-      .toolbar { grid-template-columns:1fr 1fr; }
-      .split { grid-template-columns:1fr; }
+    .lotes-top-actions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+
+    .right{
+      text-align:right;
+    }
+
+    @media (max-width: 1100px){
+      .lotes-grid{
+        grid-template-columns:1fr;
+      }
+
+      .detail-meta{
+        grid-template-columns:repeat(2, 1fr);
+      }
+
+      .lotes-toolbar{
+        grid-template-columns:1fr 1fr;
+      }
+
+      .lotes-split{
+        grid-template-columns:1fr;
+      }
+    }
+
+    @media (max-width: 760px){
+      .lotes-form-grid,
+      .lotes-toolbar{
+        grid-template-columns:1fr;
+      }
+
+      .detail-head{
+        flex-direction:column;
+      }
+
+      .detail-actions{
+        justify-content:flex-start;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="topbar">
-      <div>
-        <div class="title">Lotes operativos</div>
-        <div class="muted">Colecta hacia central / distribución hacia destino final</div>
+  <div class="exr-pro-wrap">
+    <header class="exr-pro-topbar">
+      <div class="exr-pro-brand">
+        <div class="exr-pro-logo">
+          <img src="/assets/exr-logo-blanco.png" alt="EXR" />
+        </div>
+        <div style="min-width:0;">
+          <h1 class="exr-pro-title">Lotes</h1>
+          <div class="exr-pro-subtitle">Colecta hacia HUB_EXR, distribución final, recepción y hoja de ruta</div>
+        </div>
       </div>
-    </div>
 
-    <div class="grid">
-      <section class="card">
-        <h3>Crear lote</h3>
+      <div class="exr-pro-row" style="flex-wrap:wrap;justify-content:flex-end;">
+        <a class="exr-pro-btn" href="/panel.html">Volver</a>
+        <button class="exr-pro-btn bad" type="button"
+          onclick="localStorage.removeItem('exr_token'); location.href='/operador.html'">
+          Salir
+        </button>
+      </div>
+    </header>
 
-        <div class="form-grid">
+    <section class="lotes-grid">
+      <section class="exr-pro-card">
+        <h2 class="exr-pro-section-title">Crear lote</h2>
+
+        <div class="lotes-form-grid">
           <div>
             <label for="tipo_lote">Tipo de lote</label>
-            <select id="tipo_lote">
+            <select id="tipo_lote" class="exr-pro-select">
               <option value="COLECTA">COLECTA</option>
               <option value="DISTRIBUCION">DISTRIBUCION</option>
             </select>
@@ -200,58 +321,60 @@
 
           <div>
             <label for="fecha_operativa">Fecha operativa</label>
-            <input id="fecha_operativa" type="date" />
+            <input id="fecha_operativa" class="exr-pro-input" type="date" />
           </div>
 
           <div>
             <label for="sucursal_origen_id">Sucursal origen</label>
-            <select id="sucursal_origen_id"></select>
+            <select id="sucursal_origen_id" class="exr-pro-select"></select>
           </div>
 
           <div>
-            <label for="sucursal_destino_id" id="lblDestinoLote">Destino lote / nodo receptor</label>
-            <select id="sucursal_destino_id"></select>
+            <label for="sucursal_destino_id" id="lblDestinoLote">Destino lote</label>
+            <select id="sucursal_destino_id" class="exr-pro-select"></select>
           </div>
 
           <div>
             <label for="chofer">Chofer</label>
-            <input id="chofer" type="text" placeholder="Nombre chofer" />
+            <input id="chofer" class="exr-pro-input" type="text" placeholder="Nombre chofer" />
           </div>
 
           <div>
             <label for="vehiculo">Vehículo</label>
-            <input id="vehiculo" type="text" placeholder="Unidad / camión" />
+            <input id="vehiculo" class="exr-pro-input" type="text" placeholder="Unidad / camión" />
           </div>
 
           <div>
             <label for="patente">Patente</label>
-            <input id="patente" type="text" placeholder="AA123BB" />
+            <input id="patente" class="exr-pro-input" type="text" placeholder="AA123BB" />
           </div>
 
           <div class="full">
             <label for="observaciones">Observaciones</label>
-            <textarea id="observaciones" placeholder="Observaciones operativas"></textarea>
+            <textarea id="observaciones" class="exr-pro-input" placeholder="Observaciones operativas"></textarea>
           </div>
 
           <div class="full">
-            <button id="btnCrearLote">Crear lote</button>
+            <button id="btnCrearLote" class="exr-pro-btn ok" type="button">Crear lote</button>
           </div>
         </div>
 
         <div id="createStatus" class="status"></div>
       </section>
 
-      <section class="card">
-        <h3>Listado</h3>
+      <section class="exr-pro-card">
+        <h2 class="exr-pro-section-title">Listado</h2>
 
-        <div class="toolbar">
-          <input id="f_q" type="text" placeholder="Buscar por lote, chofer, vehículo, patente" />
-          <select id="f_tipo">
+        <div class="lotes-toolbar">
+          <input id="f_q" class="exr-pro-input" type="text" placeholder="Buscar por lote, chofer, vehículo, patente" />
+
+          <select id="f_tipo" class="exr-pro-select">
             <option value="">Todos los tipos</option>
             <option value="COLECTA">COLECTA</option>
             <option value="DISTRIBUCION">DISTRIBUCION</option>
           </select>
-          <select id="f_estado">
+
+          <select id="f_estado" class="exr-pro-select">
             <option value="">Todos los estados</option>
             <option value="ABIERTO">ABIERTO</option>
             <option value="CONSOLIDADO">CONSOLIDADO</option>
@@ -260,7 +383,8 @@
             <option value="CERRADO">CERRADO</option>
             <option value="ANULADO">ANULADO</option>
           </select>
-          <button id="btnRefrescar" class="secondary">Refrescar</button>
+
+          <button id="btnRefrescar" class="exr-pro-btn" type="button">Refrescar</button>
         </div>
 
         <div class="table-wrap">
@@ -286,29 +410,29 @@
         </div>
 
         <div id="lotesPager" class="section-spacer" style="display:flex; gap:8px; align-items:center; justify-content:flex-end;">
-          <button id="btnPrevLotes" class="secondary" type="button">Anterior</button>
-          <span id="lotesPagerInfo" class="muted">Página 1 de 1</span>
-          <button id="btnNextLotes" class="secondary" type="button">Siguiente</button>
+          <button id="btnPrevLotes" class="exr-pro-btn" type="button">Anterior</button>
+          <span id="lotesPagerInfo" class="exr-pro-chip">Página 1 de 1</span>
+          <button id="btnNextLotes" class="exr-pro-btn" type="button">Siguiente</button>
         </div>
 
         <div id="listStatus" class="status"></div>
       </section>
-    </div>
+    </section>
 
-    <section class="card" style="margin-top:16px;">
+    <section class="exr-pro-card" style="margin-top:16px;">
       <div class="detail-head">
         <div>
           <div class="detail-number" id="detailNumero">Sin lote seleccionado</div>
-          <div class="muted" id="detailSub">Seleccioná un lote desde el listado</div>
+          <div class="exr-pro-subtitle" id="detailSub">Seleccioná un lote desde el listado</div>
         </div>
 
         <div class="detail-actions">
-          <button id="btnImprimir" class="secondary" disabled>Imprimir hoja</button>
-          <button id="btnConsolidar" class="warn" disabled>Consolidar</button>
-          <button id="btnDespachar" class="secondary" disabled>Despachar</button>
-          <button id="btnRecepcionar" class="secondary" disabled>Registrar recepción</button>
-          <button id="btnCerrarLote" class="warn" type="button" disabled>Cerrar lote</button>
-          <button id="btnAnular" class="danger" disabled>Anular</button>
+          <button id="btnImprimir" class="exr-pro-btn" type="button" disabled>Imprimir hoja</button>
+          <button id="btnConsolidar" class="exr-pro-btn warn" type="button" disabled>Consolidar</button>
+          <button id="btnDespachar" class="exr-pro-btn" type="button" disabled>Despachar</button>
+          <button id="btnRecepcionar" class="exr-pro-btn" type="button" disabled>Registrar recepción</button>
+          <button id="btnCerrarLote" class="exr-pro-btn warn" type="button" disabled>Cerrar lote</button>
+          <button id="btnAnular" class="exr-pro-btn bad" type="button" disabled>Anular</button>
         </div>
       </div>
 
@@ -328,7 +452,7 @@
         <div class="meta-box"><div class="meta-k">Bultos</div><div class="meta-v" id="mBultos">-</div></div>
       </div>
 
-      <div class="split">
+      <div class="lotes-split">
         <div>
           <div id="sectionAbierto" class="section-block">
             <div class="mini-title">Operación de lote ABIERTO</div>
@@ -338,25 +462,25 @@
 
             <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
               <div class="mini-title" style="margin-bottom:0;">Guías disponibles para agregar</div>
-              <div class="badge">Disponibles: <span id="countGuiasDisponibles">0</span></div>
+              <div class="exr-pro-chip">Disponibles: <span id="countGuiasDisponibles">0</span></div>
             </div>
 
-            <div class="form-grid">
+            <div class="lotes-form-grid">
               <div class="full">
                 <label for="f_disponibles_q">Buscar guía disponible</label>
-                <input id="f_disponibles_q" type="text" placeholder="Número, remitente o destinatario" />
+                <input id="f_disponibles_q" class="exr-pro-input" type="text" placeholder="Número, remitente o destinatario" />
               </div>
               <div>
-                <button id="btnRefrescarDisponibles" class="secondary" type="button">Refrescar disponibles</button>
+                <button id="btnRefrescarDisponibles" class="exr-pro-btn" type="button">Refrescar disponibles</button>
               </div>
               <div>
-                <button id="btnAgregarSeleccionadas" type="button">Agregar seleccionadas</button>
+                <button id="btnAgregarSeleccionadas" class="exr-pro-btn ok" type="button">Agregar seleccionadas</button>
               </div>
               <div>
-                <button id="btnMarcarTodasDisponibles" class="secondary" type="button">Marcar todas</button>
+                <button id="btnMarcarTodasDisponibles" class="exr-pro-btn" type="button">Marcar todas</button>
               </div>
               <div>
-                <button id="btnDesmarcarTodasDisponibles" class="secondary" type="button">Desmarcar</button>
+                <button id="btnDesmarcarTodasDisponibles" class="exr-pro-btn" type="button">Desmarcar</button>
               </div>
             </div>
 
@@ -367,7 +491,7 @@
             <div class="section-spacer">
               <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
                 <div class="mini-title" style="margin-bottom:0;">Guías ya agregadas al lote</div>
-                <div class="badge">Agregadas: <span id="countGuiasAgregadas">0</span></div>
+                <div class="exr-pro-chip">Agregadas: <span id="countGuiasAgregadas">0</span></div>
               </div>
 
               <div id="guiasAgregadasWrap" class="list-box">
@@ -378,7 +502,7 @@
             <div class="section-spacer">
               <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
                 <div class="mini-title" style="margin-bottom:0;">Conflictos al agregar</div>
-                <div class="badge">Conflictos: <span id="countGuiasConflictos">0</span></div>
+                <div class="exr-pro-chip">Conflictos: <span id="countGuiasConflictos">0</span></div>
               </div>
 
               <div id="guiasBatchConflictosWrap" class="list-box">
@@ -389,16 +513,16 @@
             <div id="addGuiaWrap" class="section-spacer">
               <div class="mini-title">Agregar guía por número</div>
 
-              <div class="form-grid">
+              <div class="lotes-form-grid">
                 <div class="full">
                   <label for="numero_guia_add">Número de guía</label>
-                  <input id="numero_guia_add" type="text" placeholder="Ej: EXR-000123" />
+                  <input id="numero_guia_add" class="exr-pro-input" type="text" placeholder="Ej: EXR-000123" />
                 </div>
                 <div>
-                  <button id="btnBuscarGuia" class="secondary">Buscar guía</button>
+                  <button id="btnBuscarGuia" class="exr-pro-btn" type="button">Buscar guía</button>
                 </div>
                 <div>
-                  <button id="btnAgregarGuia" disabled>Agregar al lote</button>
+                  <button id="btnAgregarGuia" class="exr-pro-btn ok" type="button" disabled>Agregar al lote</button>
                 </div>
               </div>
 
@@ -414,10 +538,10 @@
               Las guías se marcan por defecto como <b>RECIBIDO_OK</b>. Solo cambiá las que tengan novedad.
             </div>
 
-            <div class="form-grid">
+            <div class="lotes-form-grid">
               <div class="full">
                 <label for="observacion_general">Observación general</label>
-                <textarea id="observacion_general" placeholder="Observación general de recepción"></textarea>
+                <textarea id="observacion_general" class="exr-pro-input" placeholder="Observación general de recepción"></textarea>
               </div>
             </div>
           </div>
@@ -428,10 +552,10 @@
               Cuando el lote ya está recibido, podés cerrarlo operativamente.
             </div>
 
-            <div class="form-grid">
+            <div class="lotes-form-grid">
               <div class="full">
                 <label for="observacion_cierre">Observación de cierre</label>
-                <input id="observacion_cierre" type="text" placeholder="Observación de cierre (opcional)" />
+                <input id="observacion_cierre" class="exr-pro-input" type="text" placeholder="Observación de cierre (opcional)" />
               </div>
             </div>
           </div>

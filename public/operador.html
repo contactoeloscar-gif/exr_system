@@ -3,377 +3,492 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Operador | EXR</title>
+  <title>EXR — Operador</title>
+  <link rel="stylesheet" href="/css/exr_ui.css" />
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:0;background:#0b0f14;color:#e8eef6}
-    .wrap{max-width:980px;margin:0 auto;padding:22px}
-    .card{background:#121a24;border:1px solid #233246;border-radius:14px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
-    h1{margin:0 0 10px;font-size:20px}
-    .muted{color:#a8b6c8}
-    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center}
+    .op-grid{
+      display:grid;
+      gap:14px;
+      margin-top:14px;
+    }
 
-    input,select{padding:10px 12px;border-radius:10px;border:1px solid #2b3c54;background:#0f1620;color:#e8eef6;outline:none}
-    button{padding:10px 12px;border-radius:10px;border:0;background:#16a34a;color:#04110a;font-weight:800;cursor:pointer}
-    button.secondary{background:#64748b;color:#0b0f14}
-    button:disabled{opacity:.6;cursor:not-allowed}
+    .op-row{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
 
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
-    .k{font-size:12px;color:#a8b6c8;margin-bottom:3px}
-    .v{font-size:14px}
-    .sep{height:1px;background:#233246;margin:14px 0}
+    .op-grid-2{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+      margin-top:12px;
+    }
 
-    .err{margin-top:12px;color:#ffb4b4;background:#2a1212;border:1px solid #5a1d1d;padding:10px 12px;border-radius:10px}
-    .ok{margin-top:12px;color:#baf7cd;background:#0f2418;border:1px solid #1f5a36;padding:10px 12px;border-radius:10px}
+    .op-k{
+      font-size:12px;
+      color:var(--muted);
+      margin-bottom:3px;
+      text-transform:uppercase;
+      letter-spacing:.2px;
+      font-weight:700;
+    }
 
-    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#0f1620;border:1px solid #2b3c54;color:#cfe0f7;font-size:12px}
+    .op-v{
+      font-size:14px;
+    }
 
-    /* Botones tipo “app” */
-    .topActions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
-    .btnLink{
-      display:inline-flex; align-items:center; gap:8px;
+    .op-sep{
+      height:1px;
+      background:var(--line);
+      margin:14px 0;
+    }
+
+    .op-msg .err,
+    .op-msg .ok{
+      margin-top:12px;
       padding:10px 12px;
       border-radius:10px;
-      border:1px solid #2b3c54;
+      border:1px solid var(--line);
+    }
+
+    .op-msg .err{
+      color:#ffb4b4;
+      background:#2a1212;
+      border-color:#5a1d1d;
+    }
+
+    .op-msg .ok{
+      color:#baf7cd;
+      background:#0f2418;
+      border-color:#1f5a36;
+    }
+
+    .op-pill{
+      display:inline-block;
+      padding:6px 10px;
+      border-radius:999px;
       background:#0f1620;
-      color:#e8eef6;
+      border:1px solid var(--line);
+      color:#cfe0f7;
+      font-size:12px;
+    }
+
+    .topActions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+      margin-top:12px;
+    }
+
+    .btnLink{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid var(--line);
+      background:#0f1620;
+      color:var(--text);
       text-decoration:none;
       font-weight:800;
       cursor:pointer;
       user-select:none;
     }
-    .btnLink:hover{border-color:#3b516f}
-    .btnLink:active{transform:translateY(1px)}
-    .btnDash{background:#16a34a;border-color:#1f5a36;color:#04110a}
-    .btnExec{background:#a855f7;border-color:#6b21a8;color:#0b0f14}
+
+    .btnLink:hover{
+      border-color:rgba(124,58,237,.35);
+      background:rgba(18,28,40,.85);
+    }
+
+    .btnLink:active{ transform:translateY(1px); }
+
+    .btnDash{
+      background:#16a34a;
+      border-color:#1f5a36;
+      color:#04110a;
+    }
+
+    .btnExec{
+      background:#a855f7;
+      border-color:#6b21a8;
+      color:#0b0f14;
+    }
+
     .btnIcon{
-      width:22px;height:22px;display:inline-grid;place-items:center;
-      border-radius:7px;background:rgba(255,255,255,.12)
+      width:22px;
+      height:22px;
+      display:inline-grid;
+      place-items:center;
+      border-radius:7px;
+      background:rgba(255,255,255,.12);
     }
 
-    @media (max-width:760px){
-      .grid{grid-template-columns:1fr}
-      .wrap{padding:14px}
+    .op-pre{
+      white-space:pre-wrap;
+      word-break:break-word;
+      background:#0f1620;
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:10px;
+      margin:0;
+      font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+      font-size:12px;
     }
 
-    pre{white-space:pre-wrap;word-break:break-word;background:#0f1620;border:1px solid #2b3c54;border-radius:10px;padding:10px}
+    .op-actions-inline{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+
+    @media (max-width: 880px){
+      .op-grid-2{ grid-template-columns:1fr; }
+    }
   </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="card">
-    <h1>Panel Operador <span class="pill">EXR</span></h1>
-    <div class="muted">Login por sucursal + acciones sobre guías (pago/estado).</div>
-
-    <div id="msg"></div>
-
-    <!-- LOGIN -->
-    <div id="loginBox">
-      <div class="sep"></div>
-      <div class="row">
-        <input id="usuario" placeholder="Usuario" autocomplete="username" />
-        <input id="password" placeholder="Password" type="password" autocomplete="current-password" />
-        <button id="btnLogin">Ingresar</button>
-        <button class="secondary" id="btnLogout" style="display:none;">Salir</button>
-        <button class="secondary" id="btnBandeja">Ir a Bandeja</button>
-      </div>
-      <div class="muted" style="font-size:12px;margin-top:8px;">
-        Tip: el token se guarda en este navegador (localStorage).
-      </div>
-    </div>
-
-    <!-- APP -->
-    <div id="appBox" style="display:none;">
-      <div class="sep"></div>
-
-      <!-- Accesos rápidos (PRO) -->
-      <div class="topActions">
-        <a class="btnLink btnDash" href="/bandeja.html" title="Bandeja">
-          <span class="btnIcon">📦</span>
-         Bandeja
-        </a>
-        <a class="btnLink btnExec" href="/dashboard_ejecutivo.html" target="_blank" rel="noopener noreferrer" title="Dashboard Ejecutivo">
-          <span class="btnIcon">🏢</span>
-          Ejecutivo
-        </a>
-
-        <span class="muted" style="font-size:12px;">
-          Se abren en otra pestaña para no perder la operación.
-        </span>
+  <div class="exr-pro-wrap">
+    <header class="exr-pro-topbar">
+      <div class="exr-pro-brand">
+        <div class="exr-pro-logo">
+          <img src="/assets/exr-logo-blanco.png" alt="EXR" />
+        </div>
+        <div style="min-width:0;">
+          <h1 class="exr-pro-title">Operador</h1>
+          <div class="exr-pro-subtitle">Login por sucursal y acciones operativas sobre guías</div>
+        </div>
       </div>
 
-      <div class="row">
-        <input id="numeroGuia" placeholder="Número de guía (ej: ONCE-2026-000001)" style="min-width:280px;flex:1;" />
-        <button id="btnBuscar">Buscar</button>
-        <button class="secondary" id="btnClear">Limpiar</button>
-        <button class="secondary" id="btnIrBandeja">Bandeja</button>
+      <div class="exr-pro-row" style="flex-wrap:wrap;justify-content:flex-end;">
+        <button class="exr-pro-btn" id="btnBandeja" type="button">Panel</button>
+        <button class="exr-pro-btn bad" id="btnLogout" type="button" style="display:none;">Salir</button>
       </div>
+    </header>
 
-      <div id="detalleBox" style="display:none;">
-        <div class="sep"></div>
+    <section class="op-grid">
+      <div class="exr-pro-card">
+        <div class="panel-h" style="margin-bottom:4px;">Acceso</div>
+        <p class="panel-p">Ingresá con tu usuario de sucursal para operar guías, pagos y estados.</p>
 
-        <div class="row" style="justify-content:space-between;align-items:center">
-          <div>
-            <div class="k">Guía</div>
-            <div class="v" id="g_numero"></div>
+        <div id="msg" class="op-msg"></div>
+
+        <div id="loginBox">
+          <div class="op-sep"></div>
+
+          <div class="op-row">
+            <input id="usuario" placeholder="Usuario" autocomplete="username" />
+            <input id="password" placeholder="Password" type="password" autocomplete="current-password" />
+            <button class="exr-pro-btn" id="btnLogin" type="button">Ingresar</button>
           </div>
-          <div class="pill" id="g_estado"></div>
+
+          <div class="exr-pro-hint" style="margin-top:8px;">
+            Tip: el token se guarda en este navegador (localStorage).
+          </div>
         </div>
 
-        <div class="grid">
-          <div><div class="k">Origen</div><div class="v" id="g_origen"></div></div>
-          <div><div class="k">Destino</div><div class="v" id="g_destino"></div></div>
-          <div><div class="k">Frágil</div><div class="v" id="g_fragil"></div></div>
-          <div><div class="k">Creado</div><div class="v" id="g_creado"></div></div>
+        <div id="appBox" style="display:none;">
+          <div class="op-sep"></div>
+
+          <div class="topActions">
+            <a class="btnLink btnDash" href="/bandeja.html" title="Bandeja">
+              <span class="btnIcon">📦</span>
+              Bandeja
+            </a>
+
+            <a class="btnLink btnExec" href="/dashboard_ejecutivo.html" target="_blank" rel="noopener noreferrer" title="Dashboard Ejecutivo">
+              <span class="btnIcon">🏢</span>
+              Ejecutivo
+            </a>
+
+            <span class="exr-pro-hint">
+              Se abren en otra pestaña para no perder la operación.
+            </span>
+          </div>
+
+          <div class="op-row" style="margin-top:14px;">
+            <input id="numeroGuia" placeholder="Número de guía (ej: ONCE-2026-000001)" style="min-width:280px;flex:1;" />
+            <button class="exr-pro-btn" id="btnBuscar" type="button">Buscar</button>
+            <button class="exr-pro-btn" id="btnClear" type="button">Limpiar</button>
+            <button class="exr-pro-btn" id="btnIrBandeja" type="button">Panel</button>
+          </div>
+
+          <div id="detalleBox" style="display:none;">
+            <div class="op-sep"></div>
+
+            <div class="op-row" style="justify-content:space-between;align-items:center">
+              <div>
+                <div class="op-k">Guía</div>
+                <div class="op-v" id="g_numero"></div>
+              </div>
+              <div class="op-pill" id="g_estado"></div>
+            </div>
+
+            <div class="op-grid-2">
+              <div><div class="op-k">Origen</div><div class="op-v" id="g_origen"></div></div>
+              <div><div class="op-k">Destino</div><div class="op-v" id="g_destino"></div></div>
+              <div><div class="op-k">Frágil</div><div class="op-v" id="g_fragil"></div></div>
+              <div><div class="op-k">Creado</div><div class="op-v" id="g_creado"></div></div>
+            </div>
+
+            <div class="op-sep"></div>
+
+            <div class="op-actions-inline">
+              <select id="selPago">
+                <option value="PENDIENTE">Pago: PENDIENTE</option>
+                <option value="PAGADO">Pago: PAGADO</option>
+                <option value="CONTRA_ENTREGA">Pago: CONTRA_ENTREGA</option>
+              </select>
+              <button class="exr-pro-btn" id="btnPago" type="button">Actualizar pago</button>
+
+              <select id="selEstado">
+                <option value="RECIBIDO_ORIGEN">Estado: RECIBIDO_ORIGEN</option>
+                <option value="EN_TRANSITO">Estado: EN_TRANSITO (agrupa tránsito real)</option>
+                <option value="RECIBIDO_CENTRAL">Estado: RECIBIDO_CENTRAL</option>
+                <option value="RECIBIDO_DESTINO">Estado: RECIBIDO_DESTINO</option>
+                <option value="RECIBIDO_DESTINO">Estado: RECIBIDO_DESTINO</option>
+                <option value="ENTREGADO">Estado: ENTREGADO</option>
+              </select>
+              <button class="exr-pro-btn" id="btnEstado" type="button">Actualizar estado</button>
+
+              <button class="exr-pro-btn" id="btnPrint" type="button">Imprimir etiqueta</button>
+            </div>
+
+            <div class="exr-pro-hint" style="margin-top:8px;">
+              Nota: el backend aplica reglas de negocio según el flujo real (origen → HUB → destino), permisos por sucursal y validaciones de cobro antes de entrega.
+            </div>
+
+            <div class="op-sep"></div>
+            <div class="op-k">Debug (respuesta API)</div>
+            <pre id="debug" class="op-pre"></pre>
+          </div>
         </div>
-
-        <div class="sep"></div>
-
-        <div class="row">
-          <select id="selPago">
-            <option value="PENDIENTE">Pago: PENDIENTE</option>
-            <option value="PAGADO">Pago: PAGADO</option>
-            <option value="CONTRA_ENTREGA">Pago: CONTRA_ENTREGA</option>
-          </select>
-          <button id="btnPago">Actualizar pago</button>
-
-          <select id="selEstado">
-            <option value="RECIBIDO_ORIGEN">Estado: RECIBIDO_ORIGEN</option>
-            <option value="EN_TRANSITO">Estado: EN_TRANSITO</option>
-            <option value="RECIBIDO_DESTINO">Estado: RECIBIDO_DESTINO</option>
-            <option value="ENTREGADO">Estado: ENTREGADO</option>
-          </select>
-          <button id="btnEstado">Actualizar estado</button>
-
-          <button class="secondary" id="btnPrint">Imprimir etiqueta</button>
-        </div>
-
-        <div class="muted" style="font-size:12px;margin-top:8px;">
-          Nota: el backend aplica reglas de negocio (pago ORIGEN antes de EN_TRANSITO, permisos por sucursal, etc.).
-        </div>
-
-        <div class="sep"></div>
-        <div class="k">Debug (respuesta API)</div>
-        <pre id="debug"></pre>
       </div>
-    </div>
+    </section>
   </div>
-</div>
 
-<script>
-  const $ = (id) => document.getElementById(id);
-  const LS_TOKEN = "exr_token";
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const LS_TOKEN = "exr_token";
 
-  function setMsg(type, text){
-    const box = $("msg");
-    if(!text){ box.innerHTML=""; return; }
-    box.innerHTML = `<div class="${type}">${text}</div>`;
+function setMsg(type, text){
+  const box = $("msg");
+  if(!text){
+    box.innerHTML = "";
+    return;
   }
 
-  function token(){ return localStorage.getItem(LS_TOKEN); }
-  function setToken(t){ localStorage.setItem(LS_TOKEN, t); }
-  function clearToken(){ localStorage.removeItem(LS_TOKEN); }
+  const div = document.createElement("div");
+  div.className = type;
+  div.textContent = text;
 
-  async function safeReadJson(resp){
-    const text = await resp.text();
-    try { return text ? JSON.parse(text) : {}; } catch { return { _raw: text }; }
-  }
-
-  async function api(url, opts={}){
-    const headers = opts.headers || {};
-    if(opts.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
-    const t = token();
-    if(t) headers["Authorization"] = "Bearer " + t;
-
-    const resp = await fetch(url, { ...opts, headers });
-    const data = await safeReadJson(resp);
-
-    if(!resp.ok || data.ok === false){
-      throw new Error(data.error || ("HTTP " + resp.status));
-    }
-    return data;
-  }
-
-  async function goPanelIfLogged(){
-  const t = token();
-  if(!t) return;
-  try{
-    await api("/test-auth", { method:"GET" });
-    location.href = "/panel.html";
-  }catch(e){
-    clearToken();
-  }
+  box.innerHTML = "";
+  box.appendChild(div);
 }
+    function token(){ return localStorage.getItem(LS_TOKEN); }
+    function setToken(t){ localStorage.setItem(LS_TOKEN, t); }
+    function clearToken(){ localStorage.removeItem(LS_TOKEN); }
 
-  function showApp(isLogged){
-    $("appBox").style.display = isLogged ? "block" : "none";
-    $("btnLogout").style.display = isLogged ? "inline-block" : "none";
-  }
+    async function safeReadJson(resp){
+      const text = await resp.text();
+      try { return text ? JSON.parse(text) : {}; } catch { return { _raw: text }; }
+    }
 
-  function fmtDate(iso){
-    if(!iso) return "-";
-    try{ return new Date(iso).toLocaleString("es-AR"); }catch{ return iso; }
-  }
+    async function api(url, opts={}){
+      const headers = opts.headers || {};
+      if(opts.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+      const t = token();
+      if(t) headers["Authorization"] = "Bearer " + t;
 
-  // ===== LOGIN =====
-  async function login(){
-    setMsg("", "");
-    const usuario = $("usuario").value.trim();
-    const password = $("password").value;
-
-    try{
-      const resp = await fetch("/auth/login", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ usuario, password })
-      });
-
+      const resp = await fetch(url, { ...opts, headers });
       const data = await safeReadJson(resp);
+
       if(!resp.ok || data.ok === false){
         throw new Error(data.error || ("HTTP " + resp.status));
       }
-
-      setToken(data.token);
-      location.href = "/panel.html";
-     return;
-    }catch(e){
-      showApp(false);
-      setMsg("err", e.message);
+      return data;
     }
-  }
 
-  function logout(){
-    clearToken();
-    guiaActual = null;
-    $("detalleBox").style.display = "none";
-    $("debug").textContent = "";
-    showApp(false);
-    setMsg("ok","Sesión cerrada");
-  }
+    async function goPanelIfLogged(){
+      const t = token();
+      if(!t) return;
+      try{
+        await api("/test-auth", { method:"GET" });
+        location.href = "/panel.html";
+      }catch(e){
+        clearToken();
+      }
+    }
 
-  // ===== GUIA =====
-  let guiaActual = null;
+    function showApp(isLogged){
+      $("appBox").style.display = isLogged ? "block" : "none";
+      $("btnLogout").style.display = isLogged ? "inline-block" : "none";
+    }
 
-  async function buscar(){
-    setMsg("", "");
-    const numero = $("numeroGuia").value.trim();
-    if(!numero){ setMsg("err","Ingresá número de guía"); return; }
+    function fmtDate(iso){
+      if(!iso) return "-";
+      try{ return new Date(iso).toLocaleString("es-AR"); }catch{ return iso; }
+    }
 
-    $("btnBuscar").disabled = true;
-    $("detalleBox").style.display = "none";
-    $("debug").textContent = "";
+    let guiaActual = null;
 
-    try{
-      const interno = await api("/interno/guias/por-numero/" + encodeURIComponent(numero), { method:"GET" });
-      guiaActual = interno.guia;
+    async function login(){
+      setMsg("", "");
+      const usuario = $("usuario").value.trim();
+      const password = $("password").value;
 
-      const pub = await fetch("/tracking/" + encodeURIComponent(numero))
-        .then(r=>r.json()).catch(()=>null);
+      try{
+        const resp = await fetch("/auth/login", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({ usuario, password })
+        });
 
-      $("detalleBox").style.display = "block";
-      $("g_numero").textContent = guiaActual.numero_guia;
-      $("g_estado").textContent = guiaActual.estado_logistico;
+        const data = await safeReadJson(resp);
+        if(!resp.ok || data.ok === false){
+          throw new Error(data.error || ("HTTP " + resp.status));
+        }
 
-      $("selPago").value = guiaActual.estado_pago;
-      $("selEstado").value = guiaActual.estado_logistico;
+        setToken(data.token);
+        location.href = "/panel.html";
+        return;
+      }catch(e){
+        showApp(false);
+        setMsg("err", e.message);
+      }
+    }
 
-      $("g_origen").textContent = pub?.ok ? pub.tracking.origen : ("ID " + guiaActual.sucursal_origen_id);
-      $("g_destino").textContent = pub?.ok ? pub.tracking.destino : ("ID " + guiaActual.sucursal_destino_id);
-      $("g_fragil").textContent = guiaActual.fragil ? "Sí" : "No";
-      $("g_creado").textContent = fmtDate(guiaActual.created_at);
-
-      $("debug").textContent = JSON.stringify({ interno, pub }, null, 2);
-      setMsg("ok","Guía cargada.");
-    }catch(e){
+    function logout(){
+      clearToken();
       guiaActual = null;
-      setMsg("err", e.message);
-    }finally{
-      $("btnBuscar").disabled = false;
+      $("detalleBox").style.display = "none";
+      $("debug").textContent = "";
+      showApp(false);
+      setMsg("ok","Sesión cerrada");
     }
-  }
 
-  async function actualizarPago(){
-    if(!guiaActual?.id){ setMsg("err","Primero buscá una guía"); return; }
-    const estado_pago = $("selPago").value;
+    async function buscar(){
+      setMsg("", "");
+      const numero = $("numeroGuia").value.trim();
+      if(!numero){ setMsg("err","Ingresá número de guía"); return; }
 
-    try{
-      const r = await api("/guias/pago", {
-        method: "POST",
-        body: JSON.stringify({
-          guia_id: guiaActual.id,
-          estado_pago,
-          detalle: "Actualizado desde panel operador"
-        })
-      });
+      $("btnBuscar").disabled = true;
+      $("detalleBox").style.display = "none";
+      $("debug").textContent = "";
 
-      guiaActual = r.guia;
-      $("g_estado").textContent = guiaActual.estado_logistico;
-      $("selPago").value = guiaActual.estado_pago;
-      $("debug").textContent = JSON.stringify(r, null, 2);
-      setMsg("ok", "Pago actualizado OK");
-    }catch(e){
-      setMsg("err", e.message);
+      try{
+        const interno = await api("/interno/guias/por-numero/" + encodeURIComponent(numero), { method:"GET" });
+        guiaActual = interno.guia;
+
+        const pub = await fetch("/tracking/" + encodeURIComponent(numero))
+          .then(r=>r.json()).catch(()=>null);
+
+        $("detalleBox").style.display = "block";
+        $("g_numero").textContent = guiaActual.numero_guia;
+        $("g_estado").textContent = guiaActual.estado_logistico;
+
+        $("selPago").value = guiaActual.estado_pago;
+        $("selEstado").value = guiaActual.estado_logistico;
+
+        $("g_origen").textContent = pub?.ok ? pub.tracking.origen : ("ID " + guiaActual.sucursal_origen_id);
+        $("g_destino").textContent = pub?.ok ? pub.tracking.destino : ("ID " + guiaActual.sucursal_destino_id);
+        $("g_fragil").textContent = guiaActual.fragil ? "Sí" : "No";
+        $("g_creado").textContent = fmtDate(guiaActual.created_at);
+
+        $("debug").textContent = JSON.stringify({ interno, pub }, null, 2);
+        setMsg("ok","Guía cargada.");
+      }catch(e){
+        guiaActual = null;
+        setMsg("err", e.message);
+      }finally{
+        $("btnBuscar").disabled = false;
+      }
     }
-  }
 
-  async function actualizarEstado(){
-    if(!guiaActual?.id){ setMsg("err","Primero buscá una guía"); return; }
-    const nuevo_estado = $("selEstado").value;
+    async function actualizarPago(){
+      if(!guiaActual?.id){ setMsg("err","Primero buscá una guía"); return; }
+      const estado_pago = $("selPago").value;
 
-    try{
-      const r = await api("/guias/estado", {
-        method: "POST",
-        body: JSON.stringify({
-          guia_id: guiaActual.id,
-          nuevo_estado,
-          detalle: "Actualizado desde panel operador"
-        })
-      });
+      try{
+        const r = await api("/guias/pago", {
+          method: "POST",
+          body: JSON.stringify({
+            guia_id: guiaActual.id,
+            estado_pago,
+            detalle: "Actualizado desde panel operador"
+          })
+        });
 
-      guiaActual = r.guia;
-      $("g_estado").textContent = guiaActual.estado_logistico;
-      $("selEstado").value = guiaActual.estado_logistico;
-      $("debug").textContent = JSON.stringify(r, null, 2);
-      setMsg("ok", "Estado actualizado OK");
-    }catch(e){
-      setMsg("err", e.message);
+        guiaActual = r.guia;
+        $("g_estado").textContent = guiaActual.estado_logistico;
+        $("selPago").value = guiaActual.estado_pago;
+        $("debug").textContent = JSON.stringify(r, null, 2);
+        setMsg("ok", "Pago actualizado OK");
+      }catch(e){
+        setMsg("err", e.message);
+      }
     }
-  }
 
-  function imprimirEtiqueta(){
-    if(!guiaActual?.id){ setMsg("err","Primero buscá una guía"); return; }
-    window.open(`/etiqueta.html?id=${guiaActual.id}`, "_blank", "noopener,noreferrer,width=420,height=700");
-  }
+    async function actualizarEstado(){
+      if(!guiaActual?.id){ setMsg("err","Primero buscá una guía"); return; }
+      const nuevo_estado = $("selEstado").value;
 
-  function limpiar(){
-    guiaActual = null;
-    $("numeroGuia").value = "";
-    $("detalleBox").style.display = "none";
-    $("debug").textContent = "";
-    setMsg("", "");
-  }
+      try{
+        const r = await api("/guias/estado", {
+          method: "POST",
+          body: JSON.stringify({
+            guia_id: guiaActual.id,
+            nuevo_estado,
+            detalle: "Actualizado desde panel operador"
+          })
+        });
 
-  // ===== EVENTOS UI =====
-  $("btnLogin").addEventListener("click", login);
-  $("btnLogout").addEventListener("click", logout);
-  $("btnBuscar").addEventListener("click", buscar);
-  $("btnPago").addEventListener("click", actualizarPago);
-  $("btnEstado").addEventListener("click", actualizarEstado);
-  $("btnClear").addEventListener("click", limpiar);
-  $("btnPrint").addEventListener("click", imprimirEtiqueta);
+        guiaActual = r.guia;
+        $("g_estado").textContent = guiaActual.estado_logistico;
+        $("selEstado").value = guiaActual.estado_logistico;
+        $("debug").textContent = JSON.stringify(r, null, 2);
+        setMsg("ok", "Estado actualizado OK");
+      }catch(e){
+        setMsg("err", e.message);
+      }
+    }
 
-$("btnBandeja").addEventListener("click", () => location.href="/panel.html");
-$("btnIrBandeja").addEventListener("click", () => location.href="/panel.html");
+    function imprimirEtiqueta(){
+      if(!guiaActual?.id){ setMsg("err","Primero buscá una guía"); return; }
+      window.open(`/etiqueta.html?id=${guiaActual.id}`, "_blank", "noopener,noreferrer,width=420,height=700");
+    }
 
-  $("password").addEventListener("keydown", (e) => { if(e.key === "Enter") login(); });
-  $("numeroGuia").addEventListener("keydown", (e) => { if(e.key === "Enter") buscar(); });
+    function limpiar(){
+      guiaActual = null;
+      $("numeroGuia").value = "";
+      $("detalleBox").style.display = "none";
+      $("debug").textContent = "";
+      setMsg("", "");
+    }
 
-  // Si viene desde bandeja: /operador.html#NUMERO
-  const hash = decodeURIComponent((location.hash || "").slice(1));
-  if(hash){
-    $("numeroGuia").value = hash;
-  }
+    $("btnLogin").addEventListener("click", login);
+    $("btnLogout").addEventListener("click", logout);
+    $("btnBuscar").addEventListener("click", buscar);
+    $("btnPago").addEventListener("click", actualizarPago);
+    $("btnEstado").addEventListener("click", actualizarEstado);
+    $("btnClear").addEventListener("click", limpiar);
+    $("btnPrint").addEventListener("click", imprimirEtiqueta);
 
-goPanelIfLogged();
-</script>
+    $("btnBandeja").addEventListener("click", () => location.href="/panel.html");
+    $("btnIrBandeja").addEventListener("click", () => location.href="/panel.html");
+
+    $("password").addEventListener("keydown", (e) => { if(e.key === "Enter") login(); });
+    $("numeroGuia").addEventListener("keydown", (e) => { if(e.key === "Enter") buscar(); });
+
+    const hash = decodeURIComponent((location.hash || "").slice(1));
+    if(hash){
+      $("numeroGuia").value = hash;
+    }
+
+    goPanelIfLogged();
+  </script>
 </body>
 </html>

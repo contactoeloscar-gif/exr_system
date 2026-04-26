@@ -403,7 +403,7 @@
       <div class="ca-split">
         <section class="ca-card">
           <div class="ca-card-hd">
-            <h2 class="ca-section-title">Resumen de agencias</h2>
+<h2 class="ca-section-title">Resumen contable por agencia</h2>
             <div class="ca-actions">
               <button class="btn" id="btnResumenRefresh" type="button">Recargar</button>
             </div>
@@ -418,20 +418,20 @@
 
             <div class="ca-table-wrap">
               <table class="ca-table" id="tblAgencias">
-                <thead>
-                  <tr>
-                    <th>Agencia</th>
-                    <th>Créditos abiertos</th>
-                    <th>Débitos abiertos</th>
-                    <th>Saldo abierto</th>
-                    <th>Saldo liquidable</th>
-                    <th>Pend.</th>
-                    <th>Bloq.</th>
-                    <th>En liq. (cant / saldo)</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody id="tbAgencias"></tbody>
+<thead>
+  <tr>
+    <th>Agencia</th>
+    <th>Créditos pendientes</th>
+    <th>Débitos pendientes</th>
+    <th>Saldo abierto real</th>
+    <th>Saldo liquidable</th>
+    <th>Movs. pendientes</th>
+    <th>Movs. bloqueados</th>
+    <th>En liquidación (cant / saldo)</th>
+    <th>Acciones</th>
+  </tr>
+</thead>            
+    <tbody id="tbAgencias"></tbody>
               </table>
             </div>
           </div>
@@ -605,6 +605,7 @@
 
               <div class="ca-actions">
                 <button class="btn" id="btnVerLiquidables" type="button">Ver liquidables</button>
+                <button class="btn warn" id="btnBloquearPendientes" type="button">Bloquear pendientes</button>
                 <button class="btn ok" id="btnGenerarLiquidacion" type="button">Generar liquidación</button>
               </div>
             </div>

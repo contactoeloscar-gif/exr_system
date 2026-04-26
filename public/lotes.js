@@ -159,36 +159,39 @@
     if (input) input.value = "";
   }
 
-  async function crearLote() {
-    try {
-      setStatus("createStatus", "Creando lote...");
+async function crearLote() {
+  try {
+    setStatus("createStatus", "Creando lote...");
 
-      const body = {
-        tipo_lote: $("tipo_lote")?.value || "COLECTA",
-        fecha_operativa: $("fecha_operativa")?.value || null,
-        sucursal_origen_id: Number($("sucursal_origen_id")?.value || 0),
-        sucursal_destino_id: Number($("sucursal_destino_id")?.value || 0),
-        chofer: $("chofer")?.value.trim() || "",
-        vehiculo: $("vehiculo")?.value.trim() || "",
-        patente: $("patente")?.value.trim() || "",
-        observaciones: $("observaciones")?.value.trim() || ""
-      };
+    const tipoRaw = String($("tipo_lote")?.value || "").trim().toUpperCase();
+    const tipoLote = tipoRaw === "DISTRIBUCION" ? "DISTRIBUCION" : "COLECTA";
 
-      const data = await api("/interno/lotes", {
-        method: "POST",
-        headers: headers(),
-        body: JSON.stringify(body)
-      });
+    const body = {
+      tipo_lote: tipoLote,
+      fecha_operativa: $("fecha_operativa")?.value || null,
+      sucursal_origen_id: Number($("sucursal_origen_id")?.value || 0),
+      sucursal_destino_id: Number($("sucursal_destino_id")?.value || 0),
+      chofer: $("chofer")?.value.trim() || "",
+      vehiculo: $("vehiculo")?.value.trim() || "",
+      patente: $("patente")?.value.trim() || "",
+      observaciones: $("observaciones")?.value.trim() || ""
+    };
 
-      setStatus("createStatus", `Lote creado: ${data.lote.numero_lote}`);
-      await cargarLotes();
-      if (data.lote?.id) {
-        await cargarDetalle(data.lote.id);
-      }
-    } catch (err) {
-      setStatus("createStatus", err.message, true);
+    const data = await api("/interno/lotes", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(body)
+    });
+
+    setStatus("createStatus", `Lote creado: ${data.lote.numero_lote}`);
+    await cargarLotes();
+    if (data.lote?.id) {
+      await cargarDetalle(data.lote.id);
     }
+  } catch (err) {
+    setStatus("createStatus", err.message, true);
   }
+}
 
   async function cargarLotes() {
     try {

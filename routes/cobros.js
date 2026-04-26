@@ -62,6 +62,11 @@ function toGuiasMetodoPago(medioPago) {
   return null;
 }
 
+function isEstadoDestinoCobrable(estadoLogistico) {
+  const e = String(estadoLogistico || "").trim().toUpperCase();
+  return ["RECIBIDO_DESTINO", "RECIBIDO_DESTINO_OBSERVADO"].includes(e);
+}
+
 async function getGuiaById(client, guiaId) {
   const q = `
     SELECT
@@ -219,12 +224,12 @@ router.post("/registrar", auth, async (req, res) => {
       });
     }
 
-    if (String(guia.estado_logistico || "").toUpperCase() !== "RECIBIDO_DESTINO") {
+    if (!isEstadoDestinoCobrable(guia.estado_logistico)) {
       await client.query("ROLLBACK");
       return res.status(400).json({
         ok: false,
         error:
-          "Solo se puede registrar cobro cuando la guía está en RECIBIDO_DESTINO.",
+          "Solo se puede registrar cobro cuando la guía está en RECIBIDO_DESTINO o RECIBIDO_DESTINO_OBSERVADO.",
       });
     }
 
