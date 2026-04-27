@@ -574,6 +574,10 @@ $("btnReset").addEventListener("click", (e) => {
         addActionButton("Imprimir etiquetas", "ok", () => {
           window.open(`${location.origin}/etiqueta_batch.html?id=${encodeURIComponent(guiaId)}`, "_blank");
         });
+        addActionButton("Comprobante cliente", "", () => {
+        window.open(`${location.origin}/comprobante_despacho.html?id=${encodeURIComponent(guiaId)}`, "_blank");
+        });
+
       }
 
       addActionButton("Ir a bandeja", "", () => (location.href = "/operador.html"));

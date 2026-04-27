@@ -111,6 +111,7 @@ function sendHtml(fileName) {
 [
   "etiqueta_batch.html",
   "etiqueta.html",
+  "comprobante_despacho.html",
   "cierres.html",
   "cierre_comprobante.html",
   "cierres_historial.html",

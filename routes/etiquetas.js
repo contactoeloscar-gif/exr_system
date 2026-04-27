@@ -153,9 +153,13 @@ router.get("/etiqueta/:guiaId", async (req, res) => {
         fragil: !!guia.fragil,
         qr_data_url: qrDataUrl,
         qr_payload: qrText,
+        remitente_nombre: guia.remitente_nombre,
+        remitente_telefono: guia.remitente_telefono,
         destinatario_nombre: guia.destinatario_nombre,
         destinatario_telefono: guia.destinatario_telefono,
         destinatario_direccion: guia.destinatario_direccion,
+        monto_total: guia.monto_total,
+        monto_cobrar_destino: guia.monto_cobrar_destino,
       },
     });
   } catch (e) {

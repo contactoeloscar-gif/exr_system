@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Comprobante de despacho | EXR</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #111;
+      background: #fff;
+      margin: 0;
+      padding: 16px;
+    }
+
+    .toolbar {
+      margin-bottom: 12px;
+    }
+
+    .toolbar button {
+      padding: 8px 12px;
+      border: 1px solid #222;
+      background: #fff;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .ticket {
+      max-width: 760px;
+      margin: 0 auto;
+      border: 2px solid #111;
+      padding: 18px;
+    }
+
+    .head {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 2px solid #111;
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+    }
+
+    .brand {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: .08em;
+    }
+
+    .sub {
+      font-size: 13px;
+      color: #555;
+      margin-top: 4px;
+    }
+
+    .title {
+      text-align: right;
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .num {
+      margin-top: 4px;
+      font-family: monospace;
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .box {
+      border: 1px solid #222;
+      padding: 10px;
+      min-height: 58px;
+    }
+
+    .k {
+      font-size: 11px;
+      color: #555;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+      font-weight: 700;
+    }
+
+    .v {
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.35;
+    }
+
+    .wide {
+      grid-column: 1 / -1;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin: 14px 0;
+    }
+
+    .summary .box {
+      text-align: center;
+      min-height: auto;
+    }
+
+    .summary .v {
+      font-size: 18px;
+    }
+
+    .legal {
+      border-top: 1px solid #999;
+      margin-top: 14px;
+      padding-top: 10px;
+      font-size: 11px;
+      color: #444;
+      line-height: 1.4;
+    }
+
+    .signs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      margin-top: 34px;
+    }
+
+    .sign {
+      border-top: 1px solid #111;
+      text-align: center;
+      padding-top: 6px;
+      font-size: 12px;
+    }
+
+    @media print {
+      .toolbar { display: none; }
+      body { padding: 0; }
+      .ticket { border: 2px solid #111; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">Imprimir</button>
+  </div>
+
+  <main class="ticket">
+    <section class="head">
+      <div>
+        <div class="brand">EXR</div>
+        <div class="sub">El amigo de tu encomienda</div>
+      </div>
+      <div class="title">
+        COMPROBANTE DE DESPACHO
+        <div class="num" id="numero">—</div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="box">
+        <div class="k">Fecha</div>
+        <div class="v" id="fecha">—</div>
+      </div>
+
+      <div class="box">
+        <div class="k">Estado</div>
+        <div class="v" id="estado">—</div>
+      </div>
+
+      <div class="box">
+        <div class="k">Origen</div>
+        <div class="v" id="origen">—</div>
+      </div>
+
+      <div class="box">
+        <div class="k">Destino</div>
+        <div class="v" id="destino">—</div>
+      </div>
+
+      <div class="box">
+        <div class="k">Remitente</div>
+        <div class="v" id="remitente">—</div>
+      </div>
+
+      <div class="box">
+        <div class="k">Destinatario</div>
+        <div class="v" id="destinatario">—</div>
+      </div>
+
+      <div class="box wide">
+        <div class="k">Dirección destino</div>
+        <div class="v" id="direccion">—</div>
+      </div>
+    </section>
+
+    <section class="summary">
+      <div class="box">
+        <div class="k">Bultos</div>
+        <div class="v" id="bultos">—</div>
+      </div>
+
+      <div class="box">
+        <div class="k">Pago</div>
+        <div class="v" id="pago">—</div>
+      </div>
+
+      <div class="box">
+        <div class="k">Importe</div>
+        <div class="v" id="importe">—</div>
+      </div>
+
+      <div class="box">
+        <div class="k">Condición</div>
+        <div class="v" id="condicion">—</div>
+      </div>
+    </section>
+
+    <section class="legal">
+      Este comprobante acredita la recepción/despacho de la encomienda en origen.
+      La entrega queda sujeta al flujo operativo correspondiente, disponibilidad de ruta,
+      validación de pago y condiciones normales de transporte.
+    </section>
+
+    <section class="signs">
+      <div class="sign">Firma cliente / remitente</div>
+      <div class="sign">Firma agencia EXR</div>
+    </section>
+  </main>
+
+  <script src="/comprobante_despacho.js?v=1"></script>
+</body>
+</html>
