@@ -231,7 +231,7 @@ app.get("/test-auth", auth, (req, res) => {
   ["/admin", "./routes/admin"],
   ["/interno/lotes", "./routes/lotes"],
   ["/interno/contabilidad", "./routes/contabilidadAgencias"],
-  ["/interno/agencia", "./routes/agenciaLiquidaciones"],
+  ["/interno/agencia", "./routes/agencialiquidaciones"],
   ["/interno/cobros", "./routes/cobros"],
   ["/interno/torre-control", "./routes/torreControl"],
   ["/interno", "./routes/bandeja"],
