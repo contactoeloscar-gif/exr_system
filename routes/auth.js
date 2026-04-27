@@ -44,6 +44,12 @@ router.post("/login", async (req, res) => {
       return res.status(500).json({ ok: false, error: "Usuario sin password_hash" });
     }
 
+    console.log("[AUTH DEBUG]", {
+  usuario: u.usuario,
+  dbUrlHost: String(process.env.DATABASE_URL || "").split("@")[1]?.split("/")[0],
+  hashPrefix: String(u.password_hash || "").slice(0, 20),
+    });
+
     const ok = await bcrypt.compare(password, u.password_hash);
 
     if (!ok) {
